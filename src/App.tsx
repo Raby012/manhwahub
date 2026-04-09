@@ -12,28 +12,27 @@ import NotFound from "./pages/NotFound";
 
 const queryClient = new QueryClient();
 
+function LayoutWithNav({ children }: { children: React.ReactNode }) {
+  return (
+    <>
+      <Navbar />
+      {children}
+    </>
+  );
+}
+
 const App = () => (
   <QueryClientProvider client={queryClient}>
     <TooltipProvider>
       <Sonner />
       <BrowserRouter>
         <Routes>
+          <Route path="/" element={<LayoutWithNav><Index /></LayoutWithNav>} />
+          <Route path="/browse" element={<LayoutWithNav><Browse /></LayoutWithNav>} />
+          <Route path="/manhwa/:id" element={<LayoutWithNav><ManhwaDetail /></LayoutWithNav>} />
+          <Route path="/bookmarks" element={<LayoutWithNav><Bookmarks /></LayoutWithNav>} />
           <Route path="/read/:manhwaId/:chapterId" element={<Reader />} />
-          <Route
-            path="*"
-            element={
-              <>
-                <Navbar />
-                <Routes>
-                  <Route path="/" element={<Index />} />
-                  <Route path="/browse" element={<Browse />} />
-                  <Route path="/manhwa/:id" element={<ManhwaDetail />} />
-                  <Route path="/bookmarks" element={<Bookmarks />} />
-                  <Route path="*" element={<NotFound />} />
-                </Routes>
-              </>
-            }
-          />
+          <Route path="*" element={<LayoutWithNav><NotFound /></LayoutWithNav>} />
         </Routes>
       </BrowserRouter>
     </TooltipProvider>
