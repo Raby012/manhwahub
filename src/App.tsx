@@ -8,6 +8,7 @@ import Browse from "./pages/Browse";
 import ManhwaDetail from "./pages/ManhwaDetail";
 import Reader from "./pages/Reader";
 import Bookmarks from "./pages/Bookmarks";
+import History from "./pages/History";
 import NotFound from "./pages/NotFound";
 
 const queryClient = new QueryClient();
@@ -31,6 +32,7 @@ const App = () => (
           <Route path="/browse" element={<LayoutWithNav><Browse /></LayoutWithNav>} />
           <Route path="/manhwa/:id" element={<LayoutWithNav><ManhwaDetail /></LayoutWithNav>} />
           <Route path="/bookmarks" element={<LayoutWithNav><Bookmarks /></LayoutWithNav>} />
+          <Route path="/history" element={<LayoutWithNav><History /></LayoutWithNav>} />
           <Route path="/read/:manhwaId/:chapterId" element={<Reader />} />
           <Route path="*" element={<LayoutWithNav><NotFound /></LayoutWithNav>} />
         </Routes>

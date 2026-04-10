@@ -3,6 +3,7 @@ import { useParams, Link, useNavigate } from "react-router-dom";
 import { getMangaById, getAllChapters, type MangaResult, type Chapter } from "@/lib/mangadex";
 import { addBookmark, removeBookmark, isBookmarked, getProgress, addRecentlyViewed } from "@/lib/storage";
 import { BookMarked, Play, ArrowLeft, Clock, ChevronDown, ChevronUp, Search } from "lucide-react";
+import SimilarManhwa from "@/components/SimilarManhwa";
 
 export default function ManhwaDetail() {
   const { id } = useParams<{ id: string }>();
@@ -180,6 +181,7 @@ export default function ManhwaDetail() {
             </button>
           )}
         </div>
+        <SimilarManhwa manga={manga} />
       </div>
     </div>
   );
