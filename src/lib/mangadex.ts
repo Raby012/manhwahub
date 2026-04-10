@@ -1,11 +1,14 @@
 const BASE_URL = "https://api.mangadex.org";
-const PROXY = "https://api.allorigins.win/raw?url=";
 
 const cache = new Map<string, { data: unknown; timestamp: number }>();
 const CACHE_DURATION = 60 * 60 * 1000; // 1 hour
 
-function apiUrl(path: string): string {
-  return `${PROXY}${encodeURIComponent(`${BASE_URL}${path}`)}`;
+function apiUrl(endpoint: string): string {
+  // Use Vite dev proxy in development, direct URL in production
+  if (import.meta.env.DEV) {
+    return `/mangadex-proxy${endpoint}`;
+  }
+  return `${BASE_URL}${endpoint}`;
 }
 
 async function cachedFetch<T>(url: string): Promise<T> {
