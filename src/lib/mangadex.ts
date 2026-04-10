@@ -1,4 +1,5 @@
 const BASE_URL = "https://api.mangadex.org";
+const PROXY_URL = "https://corsproxy.io/?";
 
 const cache = new Map<string, { data: unknown; timestamp: number }>();
 const CACHE_DURATION = 60 * 60 * 1000; // 1 hour
@@ -8,7 +9,13 @@ async function cachedFetch<T>(url: string): Promise<T> {
   if (cached && Date.now() - cached.timestamp < CACHE_DURATION) {
     return cached.data as T;
   }
-  const res = await fetch(url);
+  // Try direct first, fallback to CORS proxy
+  let res: Response;
+  try {
+    res = await fetch(url);
+  } catch {
+    res = await fetch(PROXY_URL + encodeURIComponent(url));
+  }
   if (!res.ok) throw new Error(`API error: ${res.status}`);
   const data = await res.json();
   cache.set(url, { data, timestamp: Date.now() });
