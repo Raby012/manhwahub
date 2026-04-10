@@ -3,30 +3,54 @@ const BASE_URL = "https://api.mangadex.org";
 const cache = new Map<string, { data: unknown; timestamp: number }>();
 const CACHE_DURATION = 60 * 60 * 1000; // 1 hour
 
-// Store native fetch to bypass any preview environment wrappers
-const nativeFetch: typeof fetch = (() => {
+function apiUrl(endpoint: string): string {
+  return `${BASE_URL}${endpoint}`;
+}
+
+// Get a clean fetch that bypasses any preview environment wrappers
+function getCleanFetch(): typeof fetch {
   try {
     const iframe = document.createElement('iframe');
     iframe.style.display = 'none';
     document.body.appendChild(iframe);
-    const f = iframe.contentWindow?.fetch?.bind(iframe.contentWindow) || fetch.bind(window);
+    const cleanFetch = iframe.contentWindow?.fetch;
+    if (cleanFetch) {
+      const bound = cleanFetch.bind(iframe.contentWindow!);
+      // Keep iframe alive so the binding stays valid
+      (window as any).__proxyIframe = iframe;
+      return bound;
+    }
     document.body.removeChild(iframe);
-    return f;
   } catch {
-    return fetch.bind(window);
+    // ignore
   }
-})();
+  return fetch;
+}
+
+let _cleanFetch: typeof fetch | null = null;
+function getOrCreateCleanFetch(): typeof fetch {
+  if (!_cleanFetch) {
+    _cleanFetch = getCleanFetch();
+  }
+  return _cleanFetch;
+}
 
 async function cachedFetch<T>(url: string): Promise<T> {
   const cached = cache.get(url);
   if (cached && Date.now() - cached.timestamp < CACHE_DURATION) {
     return cached.data as T;
   }
-  const res = await nativeFetch(url);
-  if (!res.ok) throw new Error(`API error: ${res.status}`);
-  const data = await res.json();
-  cache.set(url, { data, timestamp: Date.now() });
-  return data as T;
+  try {
+    const doFetch = getOrCreateCleanFetch();
+    const res = await doFetch(url);
+    if (!res.ok) throw new Error(`API error: ${res.status}`);
+    const data = await res.json();
+    cache.set(url, { data, timestamp: Date.now() });
+    return data as T;
+  } catch (err) {
+    console.error("MangaDex fetch error:", err);
+    throw err;
+  }
 }
 
 export interface MangaResult {
@@ -165,7 +189,7 @@ export async function searchManga(options: {
     Object.entries(options.order).forEach(([k, v]) => params.append(`order[${k}]`, v));
   }
 
-  const url = `${BASE_URL}/manga?${params.toString()}`;
+  const url = apiUrl(`/manga?${params.toString()}`);
   const res = await cachedFetch<any>(url);
   return {
     data: (res.data || []).map(extractManga),
@@ -178,7 +202,7 @@ export async function getMangaById(id: string): Promise<MangaResult> {
   params.append("includes[]", "cover_art");
   params.append("includes[]", "author");
   params.append("includes[]", "artist");
-  const url = `${BASE_URL}/manga/${id}?${params.toString()}`;
+  const url = apiUrl(`/manga/${id}?${params.toString()}`);
   const res = await cachedFetch<any>(url);
   return extractManga(res.data);
 }
@@ -194,7 +218,7 @@ export async function getChapters(
   params.append("limit", String(limit));
   params.append("offset", String(offset));
 
-  const url = `${BASE_URL}/manga/${mangaId}/feed?${params.toString()}`;
+  const url = apiUrl(`/manga/${mangaId}/feed?${params.toString()}`);
   const res = await cachedFetch<any>(url);
   
   const chapters: Chapter[] = (res.data || []).map((ch: any) => ({
@@ -240,7 +264,7 @@ export async function getAllChapters(mangaId: string): Promise<Chapter[]> {
 }
 
 export async function getChapterPages(chapterId: string): Promise<ChapterPages> {
-  const url = `${BASE_URL}/at-home/server/${chapterId}`;
+  const url = apiUrl(`/at-home/server/${chapterId}`);
   const res = await cachedFetch<any>(url);
   return {
     baseUrl: res.baseUrl,
@@ -251,7 +275,7 @@ export async function getChapterPages(chapterId: string): Promise<ChapterPages> 
 }
 
 export async function getTags(): Promise<{ id: string; name: string; group: string }[]> {
-  const url = `${BASE_URL}/manga/tag`;
+  const url = apiUrl(`/manga/tag`);
   const res = await cachedFetch<any>(url);
   return (res.data || []).map((t: any) => ({
     id: t.id,

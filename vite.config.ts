@@ -11,6 +11,13 @@ export default defineConfig(({ mode }) => ({
     hmr: {
       overlay: false,
     },
+    proxy: {
+      '/mangadex-proxy': {
+        target: 'https://api.mangadex.org',
+        changeOrigin: true,
+        rewrite: (path) => path.replace(/^\/mangadex-proxy/, ''),
+      },
+    },
   },
   plugins: [react(), mode === "development" && componentTagger()].filter(Boolean),
   resolve: {
