@@ -1,4 +1,4 @@
-const BASE_URL = "/api/mangadex";
+const BASE_URL = "https://api.mangadex.org";
 
 const cache = new Map<string, { data: unknown; timestamp: number }>();
 const CACHE_DURATION = 60 * 60 * 1000; // 1 hour
