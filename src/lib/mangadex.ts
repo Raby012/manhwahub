@@ -1,32 +1,28 @@
 const BASE_URL = "https://api.mangadex.org";
+const PROXY = "https://api.allorigins.win/raw?url=";
 
 const cache = new Map<string, { data: unknown; timestamp: number }>();
 const CACHE_DURATION = 60 * 60 * 1000; // 1 hour
 
-// Store native fetch to bypass any preview environment wrappers
-const nativeFetch: typeof fetch = (() => {
-  try {
-    const iframe = document.createElement('iframe');
-    iframe.style.display = 'none';
-    document.body.appendChild(iframe);
-    const f = iframe.contentWindow?.fetch?.bind(iframe.contentWindow) || fetch.bind(window);
-    document.body.removeChild(iframe);
-    return f;
-  } catch {
-    return fetch.bind(window);
-  }
-})();
+function apiUrl(path: string): string {
+  return `${PROXY}${encodeURIComponent(`${BASE_URL}${path}`)}`;
+}
 
 async function cachedFetch<T>(url: string): Promise<T> {
   const cached = cache.get(url);
   if (cached && Date.now() - cached.timestamp < CACHE_DURATION) {
     return cached.data as T;
   }
-  const res = await nativeFetch(url);
-  if (!res.ok) throw new Error(`API error: ${res.status}`);
-  const data = await res.json();
-  cache.set(url, { data, timestamp: Date.now() });
-  return data as T;
+  try {
+    const res = await fetch(url);
+    if (!res.ok) throw new Error(`API error: ${res.status}`);
+    const data = await res.json();
+    cache.set(url, { data, timestamp: Date.now() });
+    return data as T;
+  } catch (err) {
+    console.error("MangaDex fetch error:", err);
+    throw err;
+  }
 }
 
 export interface MangaResult {
