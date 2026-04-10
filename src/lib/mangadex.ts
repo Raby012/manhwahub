@@ -4,11 +4,35 @@ const cache = new Map<string, { data: unknown; timestamp: number }>();
 const CACHE_DURATION = 60 * 60 * 1000; // 1 hour
 
 function apiUrl(endpoint: string): string {
-  // Use Vite dev proxy in development, direct URL in production
-  if (import.meta.env.DEV) {
-    return `/mangadex-proxy${endpoint}`;
-  }
   return `${BASE_URL}${endpoint}`;
+}
+
+// Get a clean fetch that bypasses any preview environment wrappers
+function getCleanFetch(): typeof fetch {
+  try {
+    const iframe = document.createElement('iframe');
+    iframe.style.display = 'none';
+    document.body.appendChild(iframe);
+    const cleanFetch = iframe.contentWindow?.fetch;
+    if (cleanFetch) {
+      const bound = cleanFetch.bind(iframe.contentWindow!);
+      // Keep iframe alive so the binding stays valid
+      (window as any).__proxyIframe = iframe;
+      return bound;
+    }
+    document.body.removeChild(iframe);
+  } catch {
+    // ignore
+  }
+  return fetch;
+}
+
+let _cleanFetch: typeof fetch | null = null;
+function getOrCreateCleanFetch(): typeof fetch {
+  if (!_cleanFetch) {
+    _cleanFetch = getCleanFetch();
+  }
+  return _cleanFetch;
 }
 
 async function cachedFetch<T>(url: string): Promise<T> {
@@ -17,7 +41,8 @@ async function cachedFetch<T>(url: string): Promise<T> {
     return cached.data as T;
   }
   try {
-    const res = await fetch(url);
+    const doFetch = getOrCreateCleanFetch();
+    const res = await doFetch(url);
     if (!res.ok) throw new Error(`API error: ${res.status}`);
     const data = await res.json();
     cache.set(url, { data, timestamp: Date.now() });
