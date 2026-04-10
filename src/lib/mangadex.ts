@@ -1,5 +1,4 @@
-const BASE_URL = "https://api.mangadex.org";
-const PROXY_URL = "https://corsproxy.io/?";
+const BASE_URL = "/api/mangadex";
 
 const cache = new Map<string, { data: unknown; timestamp: number }>();
 const CACHE_DURATION = 60 * 60 * 1000; // 1 hour
