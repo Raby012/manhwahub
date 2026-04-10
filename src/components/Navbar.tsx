@@ -124,7 +124,6 @@ export default function Navbar() {
             <Link to="/history" className="px-3 py-2 text-sm text-muted-foreground hover:text-foreground transition-colors rounded-md hover:bg-muted/50 flex items-center gap-1">
               <Clock className="w-4 h-4" /> History
             </Link>
-            </Link>
             <button onClick={handleRandom} className="px-3 py-2 text-sm text-muted-foreground hover:text-foreground transition-colors rounded-md hover:bg-muted/50 flex items-center gap-1">
               <Shuffle className="w-4 h-4" /> Random
             </button>
