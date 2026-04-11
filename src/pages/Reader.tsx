@@ -198,6 +198,7 @@ export default function Reader() {
                     src={pageUrl(idx)}
                     alt={`Page ${idx + 1}`}
                     loading={idx < 3 ? "eager" : "lazy"}
+                    referrerPolicy="no-referrer"
                     className="w-full"
                     onError={() => setImgErrors((prev) => new Set(prev).add(idx))}
                   />
@@ -224,6 +225,7 @@ export default function Reader() {
               <img
                 src={pageUrl(currentPage)}
                 alt={`Page ${currentPage + 1}`}
+                referrerPolicy="no-referrer"
                 className="max-h-full max-w-full object-contain"
                 onError={() => setImgErrors((prev) => new Set(prev).add(currentPage))}
               />
