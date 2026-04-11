@@ -17,6 +17,7 @@ export default function Index() {
   const [popular, setPopular] = useState<MangaResult[]>([]);
   const [latest, setLatest] = useState<MangaResult[]>([]);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
     async function load() {
@@ -35,6 +36,7 @@ export default function Index() {
         setLatest(l.data);
       } catch (e) {
         console.error("Failed to load homepage data:", e);
+        setError("Failed to load content. Please try again.");
       }
       setLoading(false);
     }
@@ -44,6 +46,12 @@ export default function Index() {
   return (
     <div className="min-h-screen pt-20 pb-24 md:pb-10">
       <div className="container">
+        {error && !featured.length && (
+          <div className="flex flex-col items-center justify-center py-20 text-center">
+            <p className="text-destructive text-lg mb-4">{error}</p>
+            <button onClick={() => window.location.reload()} className="px-6 py-2 bg-primary text-primary-foreground rounded-lg">Retry</button>
+          </div>
+        )}
         <HeroBanner manga={featured} />
 
         {/* Genre quick filters */}
