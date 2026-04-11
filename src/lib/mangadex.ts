@@ -7,42 +7,17 @@ function apiUrl(endpoint: string): string {
   return `${BASE_URL}${endpoint}`;
 }
 
-// Get a clean fetch that bypasses any preview environment wrappers
-function getCleanFetch(): typeof fetch {
-  try {
-    const iframe = document.createElement('iframe');
-    iframe.style.display = 'none';
-    document.body.appendChild(iframe);
-    const cleanFetch = iframe.contentWindow?.fetch;
-    if (cleanFetch) {
-      const bound = cleanFetch.bind(iframe.contentWindow!);
-      // Keep iframe alive so the binding stays valid
-      (window as any).__proxyIframe = iframe;
-      return bound;
-    }
-    document.body.removeChild(iframe);
-  } catch {
-    // ignore
-  }
-  return fetch;
-}
-
-let _cleanFetch: typeof fetch | null = null;
-function getOrCreateCleanFetch(): typeof fetch {
-  if (!_cleanFetch) {
-    _cleanFetch = getCleanFetch();
-  }
-  return _cleanFetch;
-}
-
 async function cachedFetch<T>(url: string): Promise<T> {
   const cached = cache.get(url);
   if (cached && Date.now() - cached.timestamp < CACHE_DURATION) {
     return cached.data as T;
   }
   try {
-    const doFetch = getOrCreateCleanFetch();
-    const res = await doFetch(url);
+    const res = await window.fetch(url, {
+      method: "GET",
+      headers: { "Content-Type": "application/json" },
+      mode: "cors",
+    });
     if (!res.ok) throw new Error(`API error: ${res.status}`);
     const data = await res.json();
     cache.set(url, { data, timestamp: Date.now() });

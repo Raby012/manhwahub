@@ -12,10 +12,11 @@ export default defineConfig(({ mode }) => ({
       overlay: false,
     },
     proxy: {
-      '/mangadex-proxy': {
+      '/mangadex': {
         target: 'https://api.mangadex.org',
         changeOrigin: true,
-        rewrite: (path) => path.replace(/^\/mangadex-proxy/, ''),
+        secure: true,
+        rewrite: (path) => path.replace(/^\/mangadex/, ''),
       },
     },
   },
