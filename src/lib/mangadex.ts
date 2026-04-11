@@ -122,19 +122,6 @@ function extractManga(manga: any): MangaResult {
   };
 }
 
-function buildParams(params: Record<string, string | string[] | number | undefined>): string {
-  const searchParams = new URLSearchParams();
-  Object.entries(params).forEach(([key, value]) => {
-    if (value === undefined) return;
-    if (Array.isArray(value)) {
-      value.forEach((v) => searchParams.append(key, v));
-    } else {
-      searchParams.append(key, String(value));
-    }
-  });
-  return searchParams.toString();
-}
-
 export async function searchManga(options: {
   title?: string;
   originalLanguage?: string[];
