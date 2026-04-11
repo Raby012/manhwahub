@@ -101,6 +101,7 @@ export default function Navbar() {
                     <img
                       src={m.coverUrl}
                       alt={m.title}
+                      referrerPolicy="no-referrer"
                       className="w-10 h-14 rounded object-cover bg-muted"
                     />
                     <div className="min-w-0">

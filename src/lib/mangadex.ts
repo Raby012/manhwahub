@@ -174,7 +174,6 @@ export async function getChapters(
   limit = 100
 ): Promise<{ data: Chapter[]; total: number }> {
   const params = new URLSearchParams();
-  params.append("translatedLanguage[]", "en");
   params.append("order[chapter]", "asc");
   params.append("limit", String(limit));
   params.append("offset", String(offset));

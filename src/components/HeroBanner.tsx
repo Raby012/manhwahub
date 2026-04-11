@@ -37,7 +37,7 @@ export default function HeroBanner({ manga }: Props) {
       {/* Background image */}
       <div
         className="absolute inset-0 bg-cover bg-center transition-all duration-700"
-        style={{ backgroundImage: `url(${m.coverUrl.replace('.256.', '.512.')})` }}
+        style={{ backgroundImage: `url(${m.coverUrl.replace('.256.', '.512.')})`}}
       />
       <div className="absolute inset-0 bg-gradient-to-r from-background via-background/80 to-transparent" />
       <div className="absolute inset-0 bg-gradient-to-t from-background via-transparent to-background/30" />
