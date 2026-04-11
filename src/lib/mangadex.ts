@@ -56,6 +56,7 @@ export interface Chapter {
   publishAt: string;
   pages: number;
   volume: string | null;
+  language: string;
 }
 
 export interface ChapterPages {
@@ -171,10 +172,11 @@ export async function getMangaById(id: string): Promise<MangaResult> {
 export async function getChapters(
   mangaId: string,
   offset = 0,
-  limit = 100
+  limit = 100,
+  language?: string
 ): Promise<{ data: Chapter[]; total: number }> {
   const params = new URLSearchParams();
-  params.append("translatedLanguage[]", "en");
+  if (language) params.append("translatedLanguage[]", language);
   params.append("order[chapter]", "asc");
   params.append("limit", String(limit));
   params.append("offset", String(offset));
@@ -188,11 +190,18 @@ export async function getChapters(
     publishAt: ch.attributes.publishAt || "",
     pages: ch.attributes.pages || 0,
     volume: ch.attributes.volume,
+    language: ch.attributes.translatedLanguage || "",
   }));
 
-  // Deduplicate by chapter number, keep first
+  // Deduplicate by chapter number, prefer English
   const seen = new Set<string>();
-  const deduped = chapters.filter((ch) => {
+  const sorted = [...chapters].sort((a, b) => {
+    if (a.chapter !== b.chapter) return 0;
+    if (a.language === "en") return -1;
+    if (b.language === "en") return 1;
+    return 0;
+  });
+  const deduped = sorted.filter((ch) => {
     if (seen.has(ch.chapter)) return false;
     seen.add(ch.chapter);
     return true;
@@ -202,16 +211,29 @@ export async function getChapters(
 }
 
 export async function getAllChapters(mangaId: string): Promise<Chapter[]> {
+  // Try English first
   let allChapters: Chapter[] = [];
   let offset = 0;
   const limit = 500;
   let total = Infinity;
 
   while (offset < total) {
-    const res = await getChapters(mangaId, offset, limit);
+    const res = await getChapters(mangaId, offset, limit, "en");
     allChapters = [...allChapters, ...res.data];
     total = res.total;
     offset += limit;
+  }
+
+  // If no English chapters, fetch all languages
+  if (allChapters.length === 0) {
+    offset = 0;
+    total = Infinity;
+    while (offset < total) {
+      const res = await getChapters(mangaId, offset, limit);
+      allChapters = [...allChapters, ...res.data];
+      total = res.total;
+      offset += limit;
+    }
   }
 
   // Deduplicate

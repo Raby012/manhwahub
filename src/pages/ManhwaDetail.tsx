@@ -76,7 +76,7 @@ export default function ManhwaDetail() {
         <div className="relative rounded-2xl overflow-hidden mb-8">
           <div className="absolute inset-0 bg-cover bg-center opacity-20 blur-2xl" style={{ backgroundImage: `url(${manga.coverUrl})` }} />
           <div className="relative flex flex-col md:flex-row gap-6 p-6">
-            <img src={manga.coverUrl.replace('.256.', '.512.')} alt={manga.title} className="w-48 md:w-56 aspect-[3/4] object-cover rounded-xl shadow-2xl shadow-primary/10 shrink-0" />
+            <img src={manga.coverUrl.replace('.256.', '.512.')} alt={manga.title} referrerPolicy="no-referrer" className="w-48 md:w-56 aspect-[3/4] object-cover rounded-xl shadow-2xl shadow-primary/10 shrink-0" />
             <div className="flex-1">
               <span className="px-3 py-1 text-xs font-semibold rounded-full bg-primary/20 text-primary uppercase mb-2 inline-block">
                 {manga.type}
