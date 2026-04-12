@@ -35,7 +35,8 @@ export default function Reader() {
     setLoading(true);
     setCurrentPage(0);
     setImgErrors(new Set());
-
+    setUseLowRes(new Set());
+    setRetryCount({});
     Promise.all([
       getMangaById(manhwaId),
       getAllChapters(manhwaId),
@@ -103,7 +104,28 @@ export default function Reader() {
   const bgClass = bg === "dark" ? "bg-background" : bg === "sepia" ? "bg-amber-50" : "bg-white";
   const pageUrl = (idx: number) => {
     if (!pages) return "";
+    if (useLowRes.has(idx) && pages.pagesLowRes[idx]) {
+      return `${pages.baseUrl}/data-saver/${pages.hash}/${pages.pagesLowRes[idx]}`;
+    }
     return `${pages.baseUrl}/data/${pages.hash}/${pages.pages[idx]}`;
+  };
+
+  const handleImgError = (idx: number) => {
+    const count = retryCount[idx] || 0;
+    if (count === 0 && pages?.pagesLowRes[idx]) {
+      // First failure: try low-res version
+      setUseLowRes((prev) => new Set(prev).add(idx));
+      setRetryCount((prev) => ({ ...prev, [idx]: 1 }));
+    } else {
+      // Mark as failed
+      setImgErrors((prev) => new Set(prev).add(idx));
+    }
+  };
+
+  const retryPage = (idx: number) => {
+    setImgErrors((prev) => { const s = new Set(prev); s.delete(idx); return s; });
+    setUseLowRes((prev) => { const s = new Set(prev); s.delete(idx); return s; });
+    setRetryCount((prev) => ({ ...prev, [idx]: 0 }));
   };
 
   if (loading) {
