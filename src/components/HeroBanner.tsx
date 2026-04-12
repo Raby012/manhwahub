@@ -34,10 +34,12 @@ export default function HeroBanner({ manga }: Props) {
 
   return (
     <div className="relative h-[50vh] md:h-[60vh] rounded-2xl overflow-hidden mb-10">
-      {/* Background image */}
-      <div
-        className="absolute inset-0 bg-cover bg-center transition-all duration-700"
-        style={{ backgroundImage: `url(${m.coverUrl.replace('.256.', '.512.')})`}}
+      {/* Background image - use img tag to ensure referrerPolicy works */}
+      <img
+        src={m.coverUrl.replace('.256.', '.512.')}
+        alt=""
+        referrerPolicy="no-referrer"
+        className="absolute inset-0 w-full h-full object-cover transition-all duration-700"
       />
       <div className="absolute inset-0 bg-gradient-to-r from-background via-background/80 to-transparent" />
       <div className="absolute inset-0 bg-gradient-to-t from-background via-transparent to-background/30" />

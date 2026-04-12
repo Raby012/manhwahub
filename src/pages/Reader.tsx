@@ -20,6 +20,8 @@ export default function Reader() {
   const [showSettings, setShowSettings] = useState(false);
   const [showUI, setShowUI] = useState(true);
   const [imgErrors, setImgErrors] = useState<Set<number>>(new Set());
+  const [useLowRes, setUseLowRes] = useState<Set<number>>(new Set());
+  const [retryCount, setRetryCount] = useState<Record<number, number>>({});
   const containerRef = useRef<HTMLDivElement>(null);
   const hideTimerRef = useRef<ReturnType<typeof setTimeout>>();
 
@@ -33,7 +35,8 @@ export default function Reader() {
     setLoading(true);
     setCurrentPage(0);
     setImgErrors(new Set());
-
+    setUseLowRes(new Set());
+    setRetryCount({});
     Promise.all([
       getMangaById(manhwaId),
       getAllChapters(manhwaId),
@@ -101,7 +104,28 @@ export default function Reader() {
   const bgClass = bg === "dark" ? "bg-background" : bg === "sepia" ? "bg-amber-50" : "bg-white";
   const pageUrl = (idx: number) => {
     if (!pages) return "";
+    if (useLowRes.has(idx) && pages.pagesLowRes[idx]) {
+      return `${pages.baseUrl}/data-saver/${pages.hash}/${pages.pagesLowRes[idx]}`;
+    }
     return `${pages.baseUrl}/data/${pages.hash}/${pages.pages[idx]}`;
+  };
+
+  const handleImgError = (idx: number) => {
+    const count = retryCount[idx] || 0;
+    if (count === 0 && pages?.pagesLowRes[idx]) {
+      // First failure: try low-res version
+      setUseLowRes((prev) => new Set(prev).add(idx));
+      setRetryCount((prev) => ({ ...prev, [idx]: 1 }));
+    } else {
+      // Mark as failed
+      setImgErrors((prev) => new Set(prev).add(idx));
+    }
+  };
+
+  const retryPage = (idx: number) => {
+    setImgErrors((prev) => { const s = new Set(prev); s.delete(idx); return s; });
+    setUseLowRes((prev) => { const s = new Set(prev); s.delete(idx); return s; });
+    setRetryCount((prev) => ({ ...prev, [idx]: 0 }));
   };
 
   if (loading) {
@@ -117,6 +141,23 @@ export default function Reader() {
       <div className="min-h-screen flex flex-col items-center justify-center bg-background gap-4">
         <p className="text-muted-foreground">Failed to load chapter</p>
         <Link to={`/manhwa/${manhwaId}`} className="text-primary hover:underline">Go back</Link>
+      </div>
+    );
+  }
+
+  if (pages.pages.length === 0) {
+    return (
+      <div className="min-h-screen flex flex-col items-center justify-center bg-background gap-4">
+        <p className="text-muted-foreground">This chapter has no readable pages</p>
+        <p className="text-xs text-muted-foreground">It may be an external chapter hosted elsewhere.</p>
+        <div className="flex gap-3">
+          {nextChapter && (
+            <button onClick={goNextChapter} className="px-6 py-2 bg-primary text-primary-foreground rounded-lg text-sm font-medium">
+              Next Chapter →
+            </button>
+          )}
+          <Link to={`/manhwa/${manhwaId}`} className="px-6 py-2 bg-muted text-foreground rounded-lg text-sm font-medium">Go back</Link>
+        </div>
       </div>
     );
   }
@@ -200,11 +241,17 @@ export default function Reader() {
                     loading={idx < 3 ? "eager" : "lazy"}
                     referrerPolicy="no-referrer"
                     className="w-full"
-                    onError={() => setImgErrors((prev) => new Set(prev).add(idx))}
+                    onError={() => handleImgError(idx)}
                   />
                 ) : (
-                  <div className="w-full aspect-[2/3] bg-muted flex items-center justify-center text-muted-foreground text-sm">
-                    Failed to load page {idx + 1}
+                  <div className="w-full aspect-[2/3] bg-muted flex flex-col items-center justify-center gap-3 text-muted-foreground text-sm">
+                    <p>Failed to load page {idx + 1}</p>
+                    <button
+                      onClick={() => retryPage(idx)}
+                      className="px-4 py-2 bg-primary text-primary-foreground rounded-lg text-xs font-medium hover:bg-primary/90 transition-colors"
+                    >
+                      Retry
+                    </button>
                   </div>
                 )}
               </div>
@@ -227,11 +274,17 @@ export default function Reader() {
                 alt={`Page ${currentPage + 1}`}
                 referrerPolicy="no-referrer"
                 className="max-h-full max-w-full object-contain"
-                onError={() => setImgErrors((prev) => new Set(prev).add(currentPage))}
+                onError={() => handleImgError(currentPage)}
               />
             ) : (
-              <div className="w-96 aspect-[2/3] bg-muted rounded-lg flex items-center justify-center text-muted-foreground">
-                Failed to load page {currentPage + 1}
+              <div className="w-96 aspect-[2/3] bg-muted rounded-lg flex flex-col items-center justify-center gap-3 text-muted-foreground">
+                <p>Failed to load page {currentPage + 1}</p>
+                <button
+                  onClick={() => retryPage(currentPage)}
+                  className="px-4 py-2 bg-primary text-primary-foreground rounded-lg text-xs font-medium hover:bg-primary/90 transition-colors"
+                >
+                  Retry
+                </button>
               </div>
             )}
             {/* Click areas */}
