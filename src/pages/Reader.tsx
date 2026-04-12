@@ -145,6 +145,23 @@ export default function Reader() {
     );
   }
 
+  if (pages.pages.length === 0) {
+    return (
+      <div className="min-h-screen flex flex-col items-center justify-center bg-background gap-4">
+        <p className="text-muted-foreground">This chapter has no readable pages</p>
+        <p className="text-xs text-muted-foreground">It may be an external chapter hosted elsewhere.</p>
+        <div className="flex gap-3">
+          {nextChapter && (
+            <button onClick={goNextChapter} className="px-6 py-2 bg-primary text-primary-foreground rounded-lg text-sm font-medium">
+              Next Chapter →
+            </button>
+          )}
+          <Link to={`/manhwa/${manhwaId}`} className="px-6 py-2 bg-muted text-foreground rounded-lg text-sm font-medium">Go back</Link>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className={`min-h-screen ${bgClass} transition-colors`} onMouseMove={handleMouseMove} onClick={() => mode === "horizontal" && setShowUI(!showUI)}>
       {/* Top bar */}
