@@ -257,11 +257,17 @@ export default function Reader() {
                 alt={`Page ${currentPage + 1}`}
                 referrerPolicy="no-referrer"
                 className="max-h-full max-w-full object-contain"
-                onError={() => setImgErrors((prev) => new Set(prev).add(currentPage))}
+                onError={() => handleImgError(currentPage)}
               />
             ) : (
-              <div className="w-96 aspect-[2/3] bg-muted rounded-lg flex items-center justify-center text-muted-foreground">
-                Failed to load page {currentPage + 1}
+              <div className="w-96 aspect-[2/3] bg-muted rounded-lg flex flex-col items-center justify-center gap-3 text-muted-foreground">
+                <p>Failed to load page {currentPage + 1}</p>
+                <button
+                  onClick={() => retryPage(currentPage)}
+                  className="px-4 py-2 bg-primary text-primary-foreground rounded-lg text-xs font-medium hover:bg-primary/90 transition-colors"
+                >
+                  Retry
+                </button>
               </div>
             )}
             {/* Click areas */}
