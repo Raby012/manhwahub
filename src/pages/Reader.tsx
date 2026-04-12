@@ -20,6 +20,8 @@ export default function Reader() {
   const [showSettings, setShowSettings] = useState(false);
   const [showUI, setShowUI] = useState(true);
   const [imgErrors, setImgErrors] = useState<Set<number>>(new Set());
+  const [useLowRes, setUseLowRes] = useState<Set<number>>(new Set());
+  const [retryCount, setRetryCount] = useState<Record<number, number>>({});
   const containerRef = useRef<HTMLDivElement>(null);
   const hideTimerRef = useRef<ReturnType<typeof setTimeout>>();
 
