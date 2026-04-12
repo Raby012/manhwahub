@@ -3,6 +3,7 @@ import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
   "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
+  "Access-Control-Allow-Methods": "GET, OPTIONS",
 };
 
 serve(async (req) => {
@@ -18,7 +19,10 @@ serve(async (req) => {
     const mangadexUrl = `https://api.mangadex.org${path}${query ? `?${query}` : ""}`;
 
     const response = await fetch(mangadexUrl, {
-      headers: { Accept: "application/json" },
+      headers: {
+        "Accept": "application/json",
+        "User-Agent": "ManhwaHub/1.0",
+      },
     });
 
     if (!response.ok) {
@@ -41,7 +45,11 @@ serve(async (req) => {
 
     return new Response(JSON.stringify(data), {
       status: 200,
-      headers: { ...corsHeaders, "Content-Type": "application/json" },
+      headers: {
+        ...corsHeaders,
+        "Content-Type": "application/json",
+        "Cache-Control": "public, max-age=300",
+      },
     });
   } catch (error) {
     console.error("Unexpected error in mangadex-proxy:", error);

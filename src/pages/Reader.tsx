@@ -2,7 +2,7 @@ import { useState, useEffect, useCallback, useRef } from "react";
 import { useParams, useNavigate, Link } from "react-router-dom";
 import { getMangaById, getAllChapters, getChapterPages, type MangaResult, type Chapter, type ChapterPages } from "@/lib/mangadex";
 import { setProgress, markChapterRead } from "@/lib/storage";
-import { ChevronLeft, ChevronRight, Settings, ArrowLeft, Maximize2, Minimize2 } from "lucide-react";
+import { ChevronLeft, ChevronRight, Settings, ArrowLeft, RefreshCw } from "lucide-react";
 
 type ReadingMode = "vertical" | "horizontal";
 type BgMode = "dark" | "light" | "sepia";
@@ -12,16 +12,16 @@ export default function Reader() {
   const navigate = useNavigate();
   const [manga, setManga] = useState<MangaResult | null>(null);
   const [chapters, setChapters] = useState<Chapter[]>([]);
-  const [pages, setPages] = useState<ChapterPages | null>(null);
+  const [imageUrls, setImageUrls] = useState<string[]>([]);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
   const [currentPage, setCurrentPage] = useState(0);
   const [mode, setMode] = useState<ReadingMode>("vertical");
   const [bg, setBg] = useState<BgMode>("dark");
   const [showSettings, setShowSettings] = useState(false);
   const [showUI, setShowUI] = useState(true);
+  const [imgLoaded, setImgLoaded] = useState<Set<number>>(new Set());
   const [imgErrors, setImgErrors] = useState<Set<number>>(new Set());
-  const [useLowRes, setUseLowRes] = useState<Set<number>>(new Set());
-  const [retryCount, setRetryCount] = useState<Record<number, number>>({});
   const containerRef = useRef<HTMLDivElement>(null);
   const hideTimerRef = useRef<ReturnType<typeof setTimeout>>();
 
@@ -30,40 +30,73 @@ export default function Reader() {
   const prevChapter = currentIdx > 0 ? chapters[currentIdx - 1] : null;
   const nextChapter = currentIdx < chapters.length - 1 ? chapters[currentIdx + 1] : null;
 
+  const loadPages = useCallback(async (chapId: string) => {
+    setLoading(true);
+    setError(null);
+    setImageUrls([]);
+    setImgLoaded(new Set());
+    setImgErrors(new Set());
+    setCurrentPage(0);
+
+    try {
+      const pagesData = await getChapterPages(chapId);
+
+      if (!pagesData.baseUrl || !pagesData.hash) {
+        throw new Error("Invalid chapter data received");
+      }
+
+      // Build image URLs - prefer full quality, fallback to data-saver
+      const pageFiles = pagesData.pages.length > 0 ? pagesData.pages : pagesData.pagesLowRes;
+      const quality = pagesData.pages.length > 0 ? "data" : "data-saver";
+
+      if (pageFiles.length === 0) {
+        throw new Error("NO_PAGES");
+      }
+
+      const urls = pageFiles.map(
+        (filename) => `${pagesData.baseUrl}/${quality}/${pagesData.hash}/${filename}`
+      );
+
+      setImageUrls(urls);
+    } catch (err: any) {
+      console.error("Failed to load chapter pages:", err);
+      if (err.message === "NO_PAGES") {
+        setError("This chapter has no readable pages. It may be hosted externally.");
+      } else {
+        setError("Failed to load chapter pages. Please try again.");
+      }
+    } finally {
+      setLoading(false);
+    }
+  }, []);
+
   useEffect(() => {
     if (!manhwaId || !chapterId) return;
-    setLoading(true);
-    setCurrentPage(0);
-    setImgErrors(new Set());
-    setUseLowRes(new Set());
-    setRetryCount({});
+
+    // Load manga info and chapters in parallel with pages
     Promise.all([
       getMangaById(manhwaId),
       getAllChapters(manhwaId),
-      getChapterPages(chapterId),
-    ])
-      .then(([m, c, p]) => {
-        setManga(m);
-        setChapters(c);
-        setPages(p);
-        const ch = c.find((ch) => ch.id === chapterId);
-        if (ch) {
-          markChapterRead(manhwaId, ch.chapter);
-          setProgress({ mangaId: manhwaId, chapterId, chapterNumber: ch.chapter, page: 0, timestamp: Date.now() });
-        }
-      })
-      .catch(console.error)
-      .finally(() => setLoading(false));
-  }, [manhwaId, chapterId]);
+    ]).then(([m, c]) => {
+      setManga(m);
+      setChapters(c);
+      const ch = c.find((ch) => ch.id === chapterId);
+      if (ch) {
+        markChapterRead(manhwaId, ch.chapter);
+        setProgress({ mangaId: manhwaId, chapterId, chapterNumber: ch.chapter, page: 0, timestamp: Date.now() });
+      }
+    }).catch(console.error);
+
+    loadPages(chapterId);
+  }, [manhwaId, chapterId, loadPages]);
 
   const goToPage = useCallback((page: number) => {
-    if (!pages) return;
-    const p = Math.max(0, Math.min(page, pages.pages.length - 1));
+    const p = Math.max(0, Math.min(page, imageUrls.length - 1));
     setCurrentPage(p);
     if (manhwaId && currentChapter) {
       setProgress({ mangaId: manhwaId, chapterId: chapterId!, chapterNumber: currentChapter.chapter, page: p, timestamp: Date.now() });
     }
-  }, [pages, manhwaId, chapterId, currentChapter]);
+  }, [imageUrls.length, manhwaId, chapterId, currentChapter]);
 
   const goNextChapter = useCallback(() => {
     if (nextChapter) navigate(`/read/${manhwaId}/${nextChapter.id}`);
@@ -79,7 +112,7 @@ export default function Reader() {
       if (mode === "horizontal") {
         if (e.key === "ArrowRight" || e.key === " ") {
           e.preventDefault();
-          if (currentPage >= (pages?.pages.length || 1) - 1) goNextChapter();
+          if (currentPage >= imageUrls.length - 1) goNextChapter();
           else goToPage(currentPage + 1);
         }
         if (e.key === "ArrowLeft") {
@@ -92,71 +125,81 @@ export default function Reader() {
     }
     window.addEventListener("keydown", handleKey);
     return () => window.removeEventListener("keydown", handleKey);
-  }, [mode, currentPage, pages, goToPage, goNextChapter, goPrevChapter]);
+  }, [mode, currentPage, imageUrls.length, goToPage, goNextChapter, goPrevChapter]);
 
-  // Auto-hide UI
   function handleMouseMove() {
     setShowUI(true);
     if (hideTimerRef.current) clearTimeout(hideTimerRef.current);
     hideTimerRef.current = setTimeout(() => setShowUI(false), 3000);
   }
 
-  const bgClass = bg === "dark" ? "bg-background" : bg === "sepia" ? "bg-amber-50" : "bg-white";
-  const pageUrl = (idx: number) => {
-    if (!pages) return "";
-    if (useLowRes.has(idx) && pages.pagesLowRes[idx]) {
-      return `${pages.baseUrl}/data-saver/${pages.hash}/${pages.pagesLowRes[idx]}`;
-    }
-    return `${pages.baseUrl}/data/${pages.hash}/${pages.pages[idx]}`;
-  };
-
-  const handleImgError = (idx: number) => {
-    const count = retryCount[idx] || 0;
-    if (count === 0 && pages?.pagesLowRes[idx]) {
-      // First failure: try low-res version
-      setUseLowRes((prev) => new Set(prev).add(idx));
-      setRetryCount((prev) => ({ ...prev, [idx]: 1 }));
-    } else {
-      // Mark as failed
-      setImgErrors((prev) => new Set(prev).add(idx));
-    }
-  };
-
   const retryPage = (idx: number) => {
     setImgErrors((prev) => { const s = new Set(prev); s.delete(idx); return s; });
-    setUseLowRes((prev) => { const s = new Set(prev); s.delete(idx); return s; });
-    setRetryCount((prev) => ({ ...prev, [idx]: 0 }));
+    setImgLoaded((prev) => { const s = new Set(prev); s.delete(idx); return s; });
+    // Force reload by appending timestamp
+    setImageUrls((prev) => {
+      const updated = [...prev];
+      const base = updated[idx].split("?")[0];
+      updated[idx] = `${base}?t=${Date.now()}`;
+      return updated;
+    });
   };
 
+  const bgClass = bg === "dark" ? "bg-background" : bg === "sepia" ? "bg-amber-50" : "bg-white";
+
+  // Loading state
   if (loading) {
     return (
-      <div className="min-h-screen flex items-center justify-center bg-background">
+      <div className="min-h-screen flex flex-col items-center justify-center bg-background gap-4">
         <div className="w-8 h-8 border-2 border-primary border-t-transparent rounded-full animate-spin" />
+        <p className="text-sm text-muted-foreground">Loading chapter...</p>
       </div>
     );
   }
 
-  if (!pages || !manga) {
+  // Error state
+  if (error) {
     return (
-      <div className="min-h-screen flex flex-col items-center justify-center bg-background gap-4">
-        <p className="text-muted-foreground">Failed to load chapter</p>
-        <Link to={`/manhwa/${manhwaId}`} className="text-primary hover:underline">Go back</Link>
-      </div>
-    );
-  }
-
-  if (pages.pages.length === 0) {
-    return (
-      <div className="min-h-screen flex flex-col items-center justify-center bg-background gap-4">
-        <p className="text-muted-foreground">This chapter has no readable pages</p>
-        <p className="text-xs text-muted-foreground">It may be an external chapter hosted elsewhere.</p>
+      <div className="min-h-screen flex flex-col items-center justify-center bg-background gap-4 px-4 text-center">
+        <p className="text-muted-foreground">{error}</p>
         <div className="flex gap-3">
+          <button
+            onClick={() => chapterId && loadPages(chapterId)}
+            className="px-6 py-2.5 bg-primary text-primary-foreground rounded-lg text-sm font-medium flex items-center gap-2 hover:bg-primary/90 transition-colors"
+          >
+            <RefreshCw className="w-4 h-4" /> Retry
+          </button>
           {nextChapter && (
-            <button onClick={goNextChapter} className="px-6 py-2 bg-primary text-primary-foreground rounded-lg text-sm font-medium">
+            <button
+              onClick={goNextChapter}
+              className="px-6 py-2.5 bg-muted text-foreground rounded-lg text-sm font-medium hover:bg-muted/80 transition-colors"
+            >
               Next Chapter →
             </button>
           )}
-          <Link to={`/manhwa/${manhwaId}`} className="px-6 py-2 bg-muted text-foreground rounded-lg text-sm font-medium">Go back</Link>
+          <Link
+            to={`/manhwa/${manhwaId}`}
+            className="px-6 py-2.5 bg-muted text-foreground rounded-lg text-sm font-medium hover:bg-muted/80 transition-colors"
+          >
+            Go Back
+          </Link>
+        </div>
+      </div>
+    );
+  }
+
+  // No images
+  if (imageUrls.length === 0) {
+    return (
+      <div className="min-h-screen flex flex-col items-center justify-center bg-background gap-4">
+        <p className="text-muted-foreground">No pages available for this chapter.</p>
+        <div className="flex gap-3">
+          {nextChapter && (
+            <button onClick={goNextChapter} className="px-6 py-2.5 bg-primary text-primary-foreground rounded-lg text-sm font-medium">
+              Next Chapter →
+            </button>
+          )}
+          <Link to={`/manhwa/${manhwaId}`} className="px-6 py-2.5 bg-muted text-foreground rounded-lg text-sm font-medium">Go Back</Link>
         </div>
       </div>
     );
@@ -172,12 +215,11 @@ export default function Reader() {
               <ArrowLeft className="w-5 h-5" />
             </Link>
             <div className="min-w-0">
-              <p className="text-sm font-medium text-foreground truncate">{manga.title}</p>
+              <p className="text-sm font-medium text-foreground truncate">{manga?.title || "Loading..."}</p>
               <p className="text-xs text-muted-foreground">Chapter {currentChapter?.chapter || "?"}</p>
             </div>
           </div>
           <div className="flex items-center gap-2">
-            {/* Chapter select */}
             <select
               value={chapterId}
               onChange={(e) => navigate(`/read/${manhwaId}/${e.target.value}`)}
@@ -232,27 +274,35 @@ export default function Reader() {
       <div ref={containerRef} className="pt-14 pb-16">
         {mode === "vertical" ? (
           <div className="max-w-3xl mx-auto">
-            {pages.pages.map((_, idx) => (
-              <div key={idx} className="relative">
-                {!imgErrors.has(idx) ? (
-                  <img
-                    src={pageUrl(idx)}
-                    alt={`Page ${idx + 1}`}
-                    loading={idx < 3 ? "eager" : "lazy"}
-                    referrerPolicy="no-referrer"
-                    className="w-full"
-                    onError={() => handleImgError(idx)}
-                  />
-                ) : (
+            {imageUrls.map((url, idx) => (
+              <div key={`${idx}-${url}`} className="relative">
+                {imgErrors.has(idx) ? (
                   <div className="w-full aspect-[2/3] bg-muted flex flex-col items-center justify-center gap-3 text-muted-foreground text-sm">
                     <p>Failed to load page {idx + 1}</p>
                     <button
                       onClick={() => retryPage(idx)}
-                      className="px-4 py-2 bg-primary text-primary-foreground rounded-lg text-xs font-medium hover:bg-primary/90 transition-colors"
+                      className="px-4 py-2 bg-primary text-primary-foreground rounded-lg text-xs font-medium flex items-center gap-2 hover:bg-primary/90 transition-colors"
                     >
-                      Retry
+                      <RefreshCw className="w-3 h-3" /> Retry
                     </button>
                   </div>
+                ) : (
+                  <>
+                    {!imgLoaded.has(idx) && (
+                      <div className="w-full aspect-[2/3] bg-muted animate-pulse flex items-center justify-center">
+                        <span className="text-xs text-muted-foreground">Loading page {idx + 1}...</span>
+                      </div>
+                    )}
+                    <img
+                      src={url}
+                      alt={`Page ${idx + 1}`}
+                      loading={idx < 3 ? "eager" : "lazy"}
+                      referrerPolicy="no-referrer"
+                      className={`w-full ${imgLoaded.has(idx) ? "" : "h-0 overflow-hidden"}`}
+                      onLoad={() => setImgLoaded((prev) => new Set(prev).add(idx))}
+                      onError={() => setImgErrors((prev) => new Set(prev).add(idx))}
+                    />
+                  </>
                 )}
               </div>
             ))}
@@ -268,24 +318,32 @@ export default function Reader() {
           </div>
         ) : (
           <div className="h-[calc(100vh-7.5rem)] flex items-center justify-center relative px-4">
-            {!imgErrors.has(currentPage) ? (
-              <img
-                src={pageUrl(currentPage)}
-                alt={`Page ${currentPage + 1}`}
-                referrerPolicy="no-referrer"
-                className="max-h-full max-w-full object-contain"
-                onError={() => handleImgError(currentPage)}
-              />
-            ) : (
+            {imgErrors.has(currentPage) ? (
               <div className="w-96 aspect-[2/3] bg-muted rounded-lg flex flex-col items-center justify-center gap-3 text-muted-foreground">
                 <p>Failed to load page {currentPage + 1}</p>
                 <button
                   onClick={() => retryPage(currentPage)}
-                  className="px-4 py-2 bg-primary text-primary-foreground rounded-lg text-xs font-medium hover:bg-primary/90 transition-colors"
+                  className="px-4 py-2 bg-primary text-primary-foreground rounded-lg text-xs font-medium flex items-center gap-2 hover:bg-primary/90 transition-colors"
                 >
-                  Retry
+                  <RefreshCw className="w-3 h-3" /> Retry
                 </button>
               </div>
+            ) : (
+              <>
+                {!imgLoaded.has(currentPage) && (
+                  <div className="absolute inset-0 flex items-center justify-center">
+                    <div className="w-8 h-8 border-2 border-primary border-t-transparent rounded-full animate-spin" />
+                  </div>
+                )}
+                <img
+                  src={imageUrls[currentPage]}
+                  alt={`Page ${currentPage + 1}`}
+                  referrerPolicy="no-referrer"
+                  className="max-h-full max-w-full object-contain"
+                  onLoad={() => setImgLoaded((prev) => new Set(prev).add(currentPage))}
+                  onError={() => setImgErrors((prev) => new Set(prev).add(currentPage))}
+                />
+              </>
             )}
             {/* Click areas */}
             <button
@@ -293,7 +351,7 @@ export default function Reader() {
               className="absolute left-0 top-0 bottom-0 w-1/3 cursor-pointer"
             />
             <button
-              onClick={() => { if (currentPage >= pages.pages.length - 1) goNextChapter(); else goToPage(currentPage + 1); }}
+              onClick={() => { if (currentPage >= imageUrls.length - 1) goNextChapter(); else goToPage(currentPage + 1); }}
               className="absolute right-0 top-0 bottom-0 w-1/3 cursor-pointer"
             />
           </div>
@@ -310,14 +368,9 @@ export default function Reader() {
           >
             <ChevronLeft className="w-4 h-4" /> Prev
           </button>
-          {mode === "horizontal" && (
-            <span className="text-xs text-muted-foreground">
-              {currentPage + 1} / {pages.pages.length}
-            </span>
-          )}
-          {mode === "vertical" && (
-            <span className="text-xs text-muted-foreground">{pages.pages.length} pages</span>
-          )}
+          <span className="text-xs text-muted-foreground">
+            {mode === "horizontal" ? `${currentPage + 1} / ${imageUrls.length}` : `${imageUrls.length} pages`}
+          </span>
           <button
             onClick={goNextChapter}
             disabled={!nextChapter}
