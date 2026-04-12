@@ -183,15 +183,22 @@ export async function getChapters(
 
   const res = await cachedFetch<any>(`/manga/${mangaId}/feed`, params.toString());
   
-  const chapters: Chapter[] = (res.data || []).map((ch: any) => ({
-    id: ch.id,
-    chapter: ch.attributes.chapter || "0",
-    title: ch.attributes.title || "",
-    publishAt: ch.attributes.publishAt || "",
-    pages: ch.attributes.pages || 0,
-    volume: ch.attributes.volume,
-    language: ch.attributes.translatedLanguage || "",
-  }));
+  const chapters: Chapter[] = (res.data || [])
+    .filter((ch: any) => {
+      // Skip external-only chapters (no readable pages)
+      const pages = ch.attributes.pages || 0;
+      const externalUrl = ch.attributes.externalUrl;
+      return pages > 0 || !externalUrl;
+    })
+    .map((ch: any) => ({
+      id: ch.id,
+      chapter: ch.attributes.chapter || "0",
+      title: ch.attributes.title || "",
+      publishAt: ch.attributes.publishAt || "",
+      pages: ch.attributes.pages || 0,
+      volume: ch.attributes.volume,
+      language: ch.attributes.translatedLanguage || "",
+    }));
 
   // Deduplicate by chapter number, prefer English
   const seen = new Set<string>();
