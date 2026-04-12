@@ -224,11 +224,17 @@ export default function Reader() {
                     loading={idx < 3 ? "eager" : "lazy"}
                     referrerPolicy="no-referrer"
                     className="w-full"
-                    onError={() => setImgErrors((prev) => new Set(prev).add(idx))}
+                    onError={() => handleImgError(idx)}
                   />
                 ) : (
-                  <div className="w-full aspect-[2/3] bg-muted flex items-center justify-center text-muted-foreground text-sm">
-                    Failed to load page {idx + 1}
+                  <div className="w-full aspect-[2/3] bg-muted flex flex-col items-center justify-center gap-3 text-muted-foreground text-sm">
+                    <p>Failed to load page {idx + 1}</p>
+                    <button
+                      onClick={() => retryPage(idx)}
+                      className="px-4 py-2 bg-primary text-primary-foreground rounded-lg text-xs font-medium hover:bg-primary/90 transition-colors"
+                    >
+                      Retry
+                    </button>
                   </div>
                 )}
               </div>
