@@ -8,7 +8,7 @@ interface Props {
   loading?: boolean;
 }
 
-export default function ManhwaSection({ title, icon, items, loading }: Props) {
+export default function ManhwaSection({ title, icon, items = [], loading }: Props) {
   if (loading) {
     return (
       <section className="mb-10">
