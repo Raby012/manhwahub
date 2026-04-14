@@ -1,14 +1,14 @@
-import type { MangaResult } from "@/lib/mangadex";
+import type { MangaListItem } from "@/lib/api";
 import ManhwaCard from "./ManhwaCard";
 
 interface Props {
   title: string;
   icon?: string;
-  manga: MangaResult[];
+  items: MangaListItem[];
   loading?: boolean;
 }
 
-export default function ManhwaSection({ title, icon, manga, loading }: Props) {
+export default function ManhwaSection({ title, icon, items, loading }: Props) {
   if (loading) {
     return (
       <section className="mb-10">
@@ -24,7 +24,7 @@ export default function ManhwaSection({ title, icon, manga, loading }: Props) {
     );
   }
 
-  if (manga.length === 0) return null;
+  if (items.length === 0) return null;
 
   return (
     <section className="mb-10 slide-up">
@@ -32,8 +32,8 @@ export default function ManhwaSection({ title, icon, manga, loading }: Props) {
         {icon && <span>{icon}</span>} {title}
       </h2>
       <div className="grid grid-cols-3 sm:grid-cols-4 md:grid-cols-5 lg:grid-cols-6 gap-3 md:gap-4">
-        {manga.map((m) => (
-          <ManhwaCard key={m.id} manga={m} />
+        {items.map((item) => (
+          <ManhwaCard key={item.slug} item={item} />
         ))}
       </div>
     </section>
