@@ -7,7 +7,7 @@ interface Props {
   items: MangaListItem[];
 }
 
-export default function HeroBanner({ items }: Props) {
+export default function HeroBanner({ items = [] }: Props) {
   const [current, setCurrent] = useState(0);
   const timerRef = useRef<ReturnType<typeof setInterval>>();
 
