@@ -1,7 +1,7 @@
 import { useState, useRef, useEffect } from "react";
 import { Link, useNavigate } from "react-router-dom";
-import { Search, BookMarked, Menu, X, Flame, Shuffle, Clock } from "lucide-react";
-import { searchManga, type MangaResult } from "@/lib/mangadex";
+import { Search, BookMarked, Menu, X, Flame, Clock } from "lucide-react";
+import { getAll, type MangaListItem } from "@/lib/api";
 
 const GENRES = [
   "Action", "Romance", "Fantasy", "Isekai", "Martial Arts",
@@ -10,10 +10,11 @@ const GENRES = [
 
 export default function Navbar() {
   const [query, setQuery] = useState("");
-  const [results, setResults] = useState<MangaResult[]>([]);
+  const [results, setResults] = useState<MangaListItem[]>([]);
   const [showResults, setShowResults] = useState(false);
   const [mobileMenu, setMobileMenu] = useState(false);
   const [searching, setSearching] = useState(false);
+  const [allItems, setAllItems] = useState<MangaListItem[]>([]);
   const searchRef = useRef<HTMLDivElement>(null);
   const debounceRef = useRef<ReturnType<typeof setTimeout>>();
   const navigate = useNavigate();
@@ -28,6 +29,11 @@ export default function Navbar() {
     return () => document.removeEventListener("mousedown", handleClick);
   }, []);
 
+  // Pre-fetch for search
+  useEffect(() => {
+    getAll(1).then(setAllItems).catch(() => {});
+  }, []);
+
   function handleSearch(value: string) {
     setQuery(value);
     if (debounceRef.current) clearTimeout(debounceRef.current);
@@ -36,15 +42,15 @@ export default function Navbar() {
       setShowResults(false);
       return;
     }
-    debounceRef.current = setTimeout(async () => {
+    debounceRef.current = setTimeout(() => {
       setSearching(true);
-      try {
-        const res = await searchManga({ title: value, limit: 6 });
-        setResults(res.data);
-        setShowResults(true);
-      } catch {}
+      const filtered = allItems.filter((m) =>
+        m.title.toLowerCase().includes(value.toLowerCase())
+      ).slice(0, 6);
+      setResults(filtered);
+      setShowResults(true);
       setSearching(false);
-    }, 400);
+    }, 200);
   }
 
   function handleSubmit(e: React.FormEvent) {
@@ -53,13 +59,6 @@ export default function Navbar() {
       setShowResults(false);
       navigate(`/browse?q=${encodeURIComponent(query.trim())}`);
     }
-  }
-
-  function handleRandom() {
-    const offset = Math.floor(Math.random() * 1000);
-    searchManga({ limit: 1, offset, order: { followedCount: "desc" } }).then((res) => {
-      if (res.data[0]) navigate(`/manhwa/${res.data[0].id}`);
-    });
   }
 
   return (
@@ -80,7 +79,7 @@ export default function Navbar() {
                   type="text"
                   value={query}
                   onChange={(e) => handleSearch(e.target.value)}
-                  placeholder="Search manhwa, manhua, manga..."
+                  placeholder="Search manhwa..."
                   className="w-full pl-10 pr-4 py-2 rounded-lg bg-muted border border-border text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-primary/50 text-sm"
                 />
               </div>
@@ -93,20 +92,14 @@ export default function Navbar() {
                 )}
                 {results.map((m) => (
                   <Link
-                    key={m.id}
-                    to={`/manhwa/${m.id}`}
+                    key={m.slug}
+                    to={`/manhwa/${m.slug}`}
                     onClick={() => setShowResults(false)}
                     className="flex items-center gap-3 p-3 hover:bg-muted/50 transition-colors"
                   >
-                    <img
-                      src={m.coverUrl}
-                      alt={m.title}
-                      referrerPolicy="no-referrer"
-                      className="w-10 h-14 rounded object-cover bg-muted"
-                    />
+                    <img src={m.image} alt={m.title} referrerPolicy="no-referrer" className="w-10 h-14 rounded object-cover bg-muted" />
                     <div className="min-w-0">
                       <p className="text-sm font-medium truncate text-foreground">{m.title}</p>
-                      <p className="text-xs text-muted-foreground capitalize">{m.type} · {m.status}</p>
                     </div>
                   </Link>
                 ))}
@@ -116,18 +109,13 @@ export default function Navbar() {
 
           {/* Desktop links */}
           <div className="hidden md:flex items-center gap-1">
-            <Link to="/browse" className="px-3 py-2 text-sm text-muted-foreground hover:text-foreground transition-colors rounded-md hover:bg-muted/50">
-              Browse
-            </Link>
+            <Link to="/browse" className="px-3 py-2 text-sm text-muted-foreground hover:text-foreground transition-colors rounded-md hover:bg-muted/50">Browse</Link>
             <Link to="/bookmarks" className="px-3 py-2 text-sm text-muted-foreground hover:text-foreground transition-colors rounded-md hover:bg-muted/50 flex items-center gap-1">
               <BookMarked className="w-4 h-4" /> Bookmarks
             </Link>
             <Link to="/history" className="px-3 py-2 text-sm text-muted-foreground hover:text-foreground transition-colors rounded-md hover:bg-muted/50 flex items-center gap-1">
               <Clock className="w-4 h-4" /> History
             </Link>
-            <button onClick={handleRandom} className="px-3 py-2 text-sm text-muted-foreground hover:text-foreground transition-colors rounded-md hover:bg-muted/50 flex items-center gap-1">
-              <Shuffle className="w-4 h-4" /> Random
-            </button>
           </div>
 
           <button className="md:hidden p-2" onClick={() => setMobileMenu(!mobileMenu)}>
@@ -147,9 +135,6 @@ export default function Navbar() {
             <Link to="/history" onClick={() => setMobileMenu(false)} className="px-4 py-3 text-foreground hover:bg-muted/50 rounded-lg flex items-center gap-2">
               <Clock className="w-4 h-4" /> History
             </Link>
-            <button onClick={() => { handleRandom(); setMobileMenu(false); }} className="px-4 py-3 text-left text-foreground hover:bg-muted/50 rounded-lg flex items-center gap-2">
-              <Shuffle className="w-4 h-4" /> Random
-            </button>
             <div className="border-t border-border mt-2 pt-4">
               <p className="px-4 text-xs text-muted-foreground mb-2">Genres</p>
               <div className="flex flex-wrap gap-2 px-4">

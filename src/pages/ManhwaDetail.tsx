@@ -1,16 +1,15 @@
 import { useState, useEffect } from "react";
 import { useParams, Link, useNavigate } from "react-router-dom";
-import { getMangaById, getAllChapters, type MangaResult, type Chapter } from "@/lib/mangadex";
+import { getMangaInfo, extractChapterFromUrl, type MangaInfo } from "@/lib/api";
 import { addBookmark, removeBookmark, isBookmarked, getProgress, addRecentlyViewed } from "@/lib/storage";
 import { BookMarked, Play, ArrowLeft, Clock, ChevronDown, ChevronUp, Search } from "lucide-react";
-import SimilarManhwa from "@/components/SimilarManhwa";
 
 export default function ManhwaDetail() {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
-  const [manga, setManga] = useState<MangaResult | null>(null);
-  const [chapters, setChapters] = useState<Chapter[]>([]);
+  const [info, setInfo] = useState<MangaInfo | null>(null);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
   const [bookmarked, setBookmarked] = useState(false);
   const [sortAsc, setSortAsc] = useState(true);
   const [chapterSearch, setChapterSearch] = useState("");
@@ -19,18 +18,21 @@ export default function ManhwaDetail() {
   useEffect(() => {
     if (!id) return;
     setLoading(true);
-    Promise.all([getMangaById(id), getAllChapters(id)])
-      .then(([m, c]) => {
-        setManga(m);
-        setChapters(c);
+    setError(null);
+    getMangaInfo(id)
+      .then((data) => {
+        setInfo(data);
         setBookmarked(isBookmarked(id));
-        addRecentlyViewed({ id: m.id, title: m.title, coverUrl: m.coverUrl, type: m.type, viewedAt: Date.now() });
+        addRecentlyViewed({ id, title: data.page, coverUrl: data.poster, type: "manhwa", viewedAt: Date.now() });
       })
-      .catch(console.error)
+      .catch((e) => {
+        console.error(e);
+        setError("Failed to load manga details.");
+      })
       .finally(() => setLoading(false));
   }, [id]);
 
-  if (loading || !manga) {
+  if (loading || !info) {
     return (
       <div className="min-h-screen pt-20 pb-24">
         <div className="container">
@@ -47,20 +49,36 @@ export default function ManhwaDetail() {
     );
   }
 
-  const progress = getProgress(manga.id);
-  const isNew = (date: string) => Date.now() - new Date(date).getTime() < 7 * 24 * 60 * 60 * 1000;
+  if (error) {
+    return (
+      <div className="min-h-screen pt-20 pb-24 flex items-center justify-center">
+        <div className="text-center">
+          <p className="text-destructive text-lg mb-4">{error}</p>
+          <button onClick={() => window.location.reload()} className="px-6 py-2 bg-primary text-primary-foreground rounded-lg">Retry</button>
+        </div>
+      </div>
+    );
+  }
+
+  const chapters = info.ch_list || [];
+  const progress = id ? getProgress(id) : null;
 
   const filteredChapters = chapters
-    .filter((c) => !chapterSearch || c.chapter.includes(chapterSearch) || c.title.toLowerCase().includes(chapterSearch.toLowerCase()))
-    .sort((a, b) => sortAsc ? parseFloat(a.chapter) - parseFloat(b.chapter) : parseFloat(b.chapter) - parseFloat(a.chapter));
+    .filter((c) => !chapterSearch || c.ch_title.toLowerCase().includes(chapterSearch.toLowerCase()))
+    .slice()
+    .sort((a, b) => sortAsc ? 0 : -1); // keep original order or reverse
 
-  const displayChapters = showAllChapters ? filteredChapters : filteredChapters.slice(0, 50);
+  const sortedChapters = sortAsc ? filteredChapters : [...filteredChapters].reverse();
+  const displayChapters = showAllChapters ? sortedChapters : sortedChapters.slice(0, 50);
+
+  const firstChapterUrl = chapters.length > 0 ? extractChapterFromUrl(chapters[0].url) : null;
 
   function toggleBookmark() {
+    if (!id || !info) return;
     if (bookmarked) {
-      removeBookmark(manga!.id);
+      removeBookmark(id);
     } else {
-      addBookmark({ id: manga!.id, title: manga!.title, coverUrl: manga!.coverUrl, type: manga!.type, addedAt: Date.now() });
+      addBookmark({ id, title: info.page, coverUrl: info.poster, type: "manhwa", addedAt: Date.now() });
     }
     setBookmarked(!bookmarked);
   }
@@ -74,39 +92,30 @@ export default function ManhwaDetail() {
 
         {/* Hero */}
         <div className="relative rounded-2xl overflow-hidden mb-8">
-          <div className="absolute inset-0 bg-cover bg-center opacity-20 blur-2xl" style={{ backgroundImage: `url(${manga.coverUrl})` }} />
+          <div className="absolute inset-0 bg-cover bg-center opacity-20 blur-2xl" style={{ backgroundImage: `url(${info.poster})` }} />
           <div className="relative flex flex-col md:flex-row gap-6 p-6">
-            <img src={manga.coverUrl.replace('.256.', '.512.')} alt={manga.title} referrerPolicy="no-referrer" className="w-48 md:w-56 aspect-[3/4] object-cover rounded-xl shadow-2xl shadow-primary/10 shrink-0" />
+            <img src={info.poster} alt={info.page} referrerPolicy="no-referrer" className="w-48 md:w-56 aspect-[3/4] object-cover rounded-xl shadow-2xl shadow-primary/10 shrink-0" />
             <div className="flex-1">
-              <span className="px-3 py-1 text-xs font-semibold rounded-full bg-primary/20 text-primary uppercase mb-2 inline-block">
-                {manga.type}
-              </span>
-              <h1 className="text-2xl md:text-3xl font-bold text-foreground mb-2">{manga.title}</h1>
-              {manga.altTitles.length > 0 && (
-                <p className="text-sm text-muted-foreground mb-3">{manga.altTitles.slice(0, 3).join(" · ")}</p>
-              )}
-              <div className="flex flex-wrap gap-3 text-sm text-muted-foreground mb-3">
-                <span>Author: <span className="text-foreground">{manga.author}</span></span>
-                {manga.artist && manga.artist !== manga.author && (
-                  <span>Artist: <span className="text-foreground">{manga.artist}</span></span>
-                )}
-                <span className={`px-2 py-0.5 rounded-full text-xs font-medium ${manga.status === "completed" ? "bg-success/20 text-success" : manga.status === "ongoing" ? "bg-primary/20 text-primary" : "bg-gold/20 text-gold"}`}>
-                  {manga.status}
+              {info.status && (
+                <span className={`px-3 py-1 text-xs font-semibold rounded-full uppercase mb-2 inline-block ${info.status.toLowerCase() === "completed" ? "bg-success/20 text-success" : "bg-primary/20 text-primary"}`}>
+                  {info.status}
                 </span>
-              </div>
+              )}
+              <h1 className="text-2xl md:text-3xl font-bold text-foreground mb-2">{info.page}</h1>
+              {info.authors && <p className="text-sm text-muted-foreground mb-3">Author: <span className="text-foreground">{info.authors}</span></p>}
               <div className="flex flex-wrap gap-2 mb-4">
-                {manga.tags.slice(0, 10).map((t) => (
-                  <Link key={t.id} to={`/browse?genre=${t.name.toLowerCase()}`} className="px-2.5 py-1 text-xs bg-muted rounded-full text-muted-foreground hover:text-foreground hover:bg-primary/20 transition-colors">
-                    {t.name}
+                {info.genres.map((g) => (
+                  <Link key={g} to={`/browse?genre=${g.toLowerCase()}`} className="px-2.5 py-1 text-xs bg-muted rounded-full text-muted-foreground hover:text-foreground hover:bg-primary/20 transition-colors">
+                    {g}
                   </Link>
                 ))}
               </div>
-              <p className="text-sm text-muted-foreground leading-relaxed mb-4 line-clamp-4">{manga.description.replace(/<[^>]*>/g, '')}</p>
-              
+              <p className="text-sm text-muted-foreground leading-relaxed mb-4 line-clamp-4">{info.description}</p>
+
               <div className="flex flex-wrap gap-3">
-                {chapters.length > 0 && (
+                {firstChapterUrl && (
                   <Link
-                    to={`/read/${manga.id}/${chapters[0].id}`}
+                    to={`/read/${id}/${firstChapterUrl}`}
                     className="px-6 py-2.5 bg-primary text-primary-foreground rounded-lg font-medium text-sm hover:bg-primary/90 transition-colors flex items-center gap-2"
                   >
                     <Play className="w-4 h-4" /> Start Reading
@@ -114,7 +123,7 @@ export default function ManhwaDetail() {
                 )}
                 {progress && (
                   <Link
-                    to={`/read/${manga.id}/${progress.chapterId}`}
+                    to={`/read/${id}/${progress.chapterId}`}
                     className="px-6 py-2.5 bg-secondary text-secondary-foreground rounded-lg font-medium text-sm hover:bg-secondary/90 transition-colors flex items-center gap-2"
                   >
                     <Clock className="w-4 h-4" /> Continue Ch. {progress.chapterNumber}
@@ -137,7 +146,7 @@ export default function ManhwaDetail() {
             <h2 className="text-lg font-bold text-foreground">{chapters.length} Chapters</h2>
             <button onClick={() => setSortAsc(!sortAsc)} className="flex items-center gap-1 text-sm text-muted-foreground hover:text-foreground transition-colors">
               {sortAsc ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
-              {sortAsc ? "Oldest first" : "Newest first"}
+              {sortAsc ? "First to Last" : "Last to First"}
             </button>
           </div>
 
@@ -153,35 +162,31 @@ export default function ManhwaDetail() {
           </div>
 
           <div className="space-y-1 max-h-[60vh] overflow-y-auto">
-            {displayChapters.map((ch) => (
-              <Link
-                key={ch.id}
-                to={`/read/${manga.id}/${ch.id}`}
-                className="flex items-center justify-between px-3 py-2.5 rounded-lg hover:bg-muted/50 transition-colors group"
-              >
-                <div className="flex items-center gap-3 min-w-0">
-                  <span className="text-sm font-medium text-foreground group-hover:text-primary transition-colors">
-                    Chapter {ch.chapter}
+            {displayChapters.map((ch, idx) => {
+              const chId = extractChapterFromUrl(ch.url);
+              return (
+                <Link
+                  key={idx}
+                  to={`/read/${id}/${chId}`}
+                  className="flex items-center justify-between px-3 py-2.5 rounded-lg hover:bg-muted/50 transition-colors group"
+                >
+                  <span className="text-sm font-medium text-foreground group-hover:text-primary transition-colors truncate">
+                    {ch.ch_title}
                   </span>
-                  {ch.title && <span className="text-sm text-muted-foreground truncate">— {ch.title}</span>}
-                  {isNew(ch.publishAt) && (
-                    <span className="px-1.5 py-0.5 text-[10px] font-bold bg-secondary/20 text-secondary rounded">NEW</span>
+                  {ch.time && (
+                    <span className="text-xs text-muted-foreground shrink-0 ml-2">{ch.time}</span>
                   )}
-                </div>
-                <span className="text-xs text-muted-foreground shrink-0">
-                  {new Date(ch.publishAt).toLocaleDateString()}
-                </span>
-              </Link>
-            ))}
+                </Link>
+              );
+            })}
           </div>
 
-          {filteredChapters.length > 50 && !showAllChapters && (
+          {sortedChapters.length > 50 && !showAllChapters && (
             <button onClick={() => setShowAllChapters(true)} className="w-full mt-4 py-2 text-sm text-primary hover:text-primary/80 transition-colors">
-              Show all {filteredChapters.length} chapters
+              Show all {sortedChapters.length} chapters
             </button>
           )}
         </div>
-        <SimilarManhwa manga={manga} />
       </div>
     </div>
   );
