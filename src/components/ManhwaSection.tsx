@@ -33,7 +33,7 @@ export default function ManhwaSection({ title, icon, items = [], loading }: Prop
       </h2>
       <div className="grid grid-cols-3 sm:grid-cols-4 md:grid-cols-5 lg:grid-cols-6 gap-3 md:gap-4">
         {items.map((item) => (
-          <ManhwaCard key={item.slug} item={item} />
+          <ManhwaCard key={item.id} item={item} />
         ))}
       </div>
     </section>

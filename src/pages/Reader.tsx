@@ -7,8 +7,7 @@ import { ArrowLeft, RefreshCw, ChevronLeft, ChevronRight } from "lucide-react";
 export default function Reader() {
   const { manhwaId, chapterId } = useParams<{ manhwaId: string; chapterId: string }>();
   const navigate = useNavigate();
-  const [imageUrls, setImageUrls] = useState<string[]>([]);
-  const [nav, setNav] = useState<{ prev: string; next: string } | null>(null);
+  const [chapterData, setChapterData] = useState<ChapterData | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [imgLoaded, setImgLoaded] = useState<Set<number>>(new Set());
@@ -20,24 +19,18 @@ export default function Reader() {
     if (!manhwaId || !chapterId) return;
     setLoading(true);
     setError(null);
-    setImageUrls([]);
+    setChapterData(null);
     setImgLoaded(new Set());
     setImgErrors(new Set());
 
     try {
       const data = await getChapterImages(manhwaId, chapterId);
 
-      if (!data.chapters || data.chapters.length === 0) {
+      if (!data.images || data.images.length === 0) {
         throw new Error("No pages found for this chapter.");
       }
 
-      const urls = data.chapters.map((c) => c.ch);
-      setImageUrls(urls);
-
-      if (data.nav && data.nav.length > 0) {
-        setNav(data.nav[0]);
-      }
-
+      setChapterData(data);
       markChapterRead(manhwaId, chapterId);
       setProgress({ mangaId: manhwaId, chapterId, chapterNumber: chapterId, page: 0, timestamp: Date.now() });
     } catch (err: any) {
@@ -53,29 +46,29 @@ export default function Reader() {
   }, [loadChapter]);
 
   const retryPage = (idx: number) => {
+    if (!chapterData) return;
     setImgErrors((prev) => { const s = new Set(prev); s.delete(idx); return s; });
     setImgLoaded((prev) => { const s = new Set(prev); s.delete(idx); return s; });
-    setImageUrls((prev) => {
-      const updated = [...prev];
+    setChapterData((prev) => {
+      if (!prev) return prev;
+      const updated = [...prev.images];
       const base = updated[idx].split("?")[0];
       updated[idx] = `${base}?t=${Date.now()}`;
-      return updated;
+      return { ...prev, images: updated };
     });
   };
 
   const goNext = useCallback(() => {
-    if (nav?.next && manhwaId) {
-      const nextChId = nav.next.split("/").filter(Boolean).pop() || "";
-      if (nextChId) navigate(`/read/${manhwaId}/${nextChId}`);
+    if (chapterData?.nextChapter && manhwaId) {
+      navigate(`/read/${manhwaId}/${chapterData.nextChapter}`);
     }
-  }, [nav, manhwaId, navigate]);
+  }, [chapterData, manhwaId, navigate]);
 
   const goPrev = useCallback(() => {
-    if (nav?.prev && manhwaId) {
-      const prevChId = nav.prev.split("/").filter(Boolean).pop() || "";
-      if (prevChId) navigate(`/read/${manhwaId}/${prevChId}`);
+    if (chapterData?.prevChapter && manhwaId) {
+      navigate(`/read/${manhwaId}/${chapterData.prevChapter}`);
     }
-  }, [nav, manhwaId, navigate]);
+  }, [chapterData, manhwaId, navigate]);
 
   function handleMouseMove() {
     setShowUI(true);
@@ -108,6 +101,8 @@ export default function Reader() {
     );
   }
 
+  const images = chapterData?.images || [];
+
   return (
     <div className="min-h-screen bg-background transition-colors" onMouseMove={handleMouseMove}>
       {/* Top bar */}
@@ -123,7 +118,7 @@ export default function Reader() {
       {/* Vertical scroll reader */}
       <div className="pt-14 pb-16">
         <div className="max-w-3xl mx-auto">
-          {imageUrls.map((url, idx) => (
+          {images.map((url, idx) => (
             <div key={`${idx}-${url}`} className="relative">
               {imgErrors.has(idx) ? (
                 <div className="w-full aspect-[2/3] bg-muted flex flex-col items-center justify-center gap-3 text-muted-foreground text-sm">
@@ -160,12 +155,12 @@ export default function Reader() {
           <div className="py-12 text-center flex flex-col items-center gap-4">
             <p className="text-muted-foreground">End of chapter</p>
             <div className="flex gap-3">
-              {nav?.prev && (
+              {chapterData?.prevChapter && (
                 <button onClick={goPrev} className="px-6 py-3 bg-muted text-foreground rounded-lg font-medium hover:bg-muted/80 transition-colors flex items-center gap-2">
                   <ChevronLeft className="w-4 h-4" /> Previous
                 </button>
               )}
-              {nav?.next && (
+              {chapterData?.nextChapter && (
                 <button onClick={goNext} className="px-8 py-3 bg-primary text-primary-foreground rounded-lg font-medium hover:bg-primary/90 transition-colors flex items-center gap-2">
                   Next Chapter <ChevronRight className="w-4 h-4" />
                 </button>
@@ -178,11 +173,11 @@ export default function Reader() {
       {/* Bottom bar */}
       <div className={`fixed bottom-0 left-0 right-0 z-50 bg-background/95 backdrop-blur-xl border-t border-border transition-transform duration-300 ${showUI ? "translate-y-0" : "translate-y-full"}`}>
         <div className="flex items-center justify-between px-4 h-12">
-          <button onClick={goPrev} disabled={!nav?.prev} className="flex items-center gap-1 text-sm text-muted-foreground hover:text-foreground disabled:opacity-30 transition-colors">
+          <button onClick={goPrev} disabled={!chapterData?.prevChapter} className="flex items-center gap-1 text-sm text-muted-foreground hover:text-foreground disabled:opacity-30 transition-colors">
             <ChevronLeft className="w-4 h-4" /> Prev
           </button>
-          <span className="text-xs text-muted-foreground">{imageUrls.length} pages</span>
-          <button onClick={goNext} disabled={!nav?.next} className="flex items-center gap-1 text-sm text-muted-foreground hover:text-foreground disabled:opacity-30 transition-colors">
+          <span className="text-xs text-muted-foreground">{images.length} pages</span>
+          <button onClick={goNext} disabled={!chapterData?.nextChapter} className="flex items-center gap-1 text-sm text-muted-foreground hover:text-foreground disabled:opacity-30 transition-colors">
             Next <ChevronRight className="w-4 h-4" />
           </button>
         </div>

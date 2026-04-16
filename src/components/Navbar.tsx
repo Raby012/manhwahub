@@ -1,7 +1,7 @@
 import { useState, useRef, useEffect } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { Search, BookMarked, Menu, X, Flame, Clock } from "lucide-react";
-import { getAll, type MangaListItem } from "@/lib/api";
+import { searchManga, type MangaListItem } from "@/lib/api";
 
 const GENRES = [
   "Action", "Romance", "Fantasy", "Isekai", "Martial Arts",
@@ -14,7 +14,6 @@ export default function Navbar() {
   const [showResults, setShowResults] = useState(false);
   const [mobileMenu, setMobileMenu] = useState(false);
   const [searching, setSearching] = useState(false);
-  const [allItems, setAllItems] = useState<MangaListItem[]>([]);
   const searchRef = useRef<HTMLDivElement>(null);
   const debounceRef = useRef<ReturnType<typeof setTimeout>>();
   const navigate = useNavigate();
@@ -29,11 +28,6 @@ export default function Navbar() {
     return () => document.removeEventListener("mousedown", handleClick);
   }, []);
 
-  // Pre-fetch for search
-  useEffect(() => {
-    getAll(1).then(setAllItems).catch(() => {});
-  }, []);
-
   function handleSearch(value: string) {
     setQuery(value);
     if (debounceRef.current) clearTimeout(debounceRef.current);
@@ -42,15 +36,17 @@ export default function Navbar() {
       setShowResults(false);
       return;
     }
-    debounceRef.current = setTimeout(() => {
+    debounceRef.current = setTimeout(async () => {
       setSearching(true);
-      const filtered = allItems.filter((m) =>
-        m.title.toLowerCase().includes(value.toLowerCase())
-      ).slice(0, 6);
-      setResults(filtered);
-      setShowResults(true);
+      try {
+        const data = await searchManga(value, 1);
+        setResults((data.mangas || []).slice(0, 6));
+        setShowResults(true);
+      } catch (e) {
+        console.error("Search error:", e);
+      }
       setSearching(false);
-    }, 200);
+    }, 400);
   }
 
   function handleSubmit(e: React.FormEvent) {
@@ -92,8 +88,8 @@ export default function Navbar() {
                 )}
                 {results.map((m) => (
                   <Link
-                    key={m.slug}
-                    to={`/manhwa/${m.slug}`}
+                    key={m.id}
+                    to={`/manhwa/${m.id}`}
                     onClick={() => setShowResults(false)}
                     className="flex items-center gap-3 p-3 hover:bg-muted/50 transition-colors"
                   >

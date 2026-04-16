@@ -1,16 +1,35 @@
-const BASE = "https://manhwa-api-production.up.railway.app";
+const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL;
+const SUPABASE_KEY = import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY;
+
+const SCRAPER_URL = `${SUPABASE_URL}/functions/v1/manga-scraper`;
 
 const cache = new Map<string, { data: unknown; timestamp: number }>();
-const CACHE_TTL = 10 * 60 * 1000; // 10 min
+const CACHE_TTL = 5 * 60 * 1000; // 5 min
 
-async function cachedFetch<T>(url: string): Promise<T> {
+async function scraperFetch<T>(params: Record<string, string>): Promise<T> {
+  const qs = new URLSearchParams(params).toString();
+  const url = `${SCRAPER_URL}?${qs}`;
+
   const cached = cache.get(url);
   if (cached && Date.now() - cached.timestamp < CACHE_TTL) {
     return cached.data as T;
   }
-  const res = await fetch(url, { headers: { Accept: "application/json" } });
-  if (!res.ok) throw new Error(`API error: ${res.status}`);
+
+  const res = await fetch(url, {
+    headers: {
+      Accept: "application/json",
+      apikey: SUPABASE_KEY,
+      Authorization: `Bearer ${SUPABASE_KEY}`,
+    },
+  });
+
+  if (!res.ok) {
+    const text = await res.text();
+    throw new Error(`API error ${res.status}: ${text}`);
+  }
+
   const data = await res.json();
+  if (data.error) throw new Error(data.error);
   cache.set(url, { data, timestamp: Date.now() });
   return data as T;
 }
@@ -18,65 +37,80 @@ async function cachedFetch<T>(url: string): Promise<T> {
 // --- Types ---
 
 export interface MangaListItem {
+  id: string;
   title: string;
-  slug: string;
   image: string;
-  url: string;
+  latestChapter?: string;
+  author?: string;
+  views?: number;
+  genres?: string[];
 }
 
-export interface MangaInfo {
-  page: string;
-  poster: string;
-  description: string;
+export interface MangaDetail {
+  id: string;
+  title: string;
+  image: string;
+  author: string;
   status: string;
-  authors: string;
   genres: string[];
-  ch_list: ChapterListItem[];
+  description: string;
+  chapters: ChapterListItem[];
 }
 
 export interface ChapterListItem {
-  ch_title: string;
-  url: string;
-  time: string;
+  id: string;
+  name: string;
+  date?: string;
+  views?: number;
 }
 
 export interface ChapterData {
-  chapters: { ch: string }[];
-  nav: { prev: string; next: string }[];
+  mangaId: string;
+  chapterId: string;
+  images: string[];
+  prevChapter: string | null;
+  nextChapter: string | null;
+}
+
+export interface HomeData {
+  popular: MangaListItem[];
+  latest: MangaListItem[];
+}
+
+export interface MangaListResponse {
+  mangas: MangaListItem[];
+  currentPage: number;
+  totalPages: number;
+  hasNextPage: boolean;
+}
+
+export interface SearchResponse {
+  mangas: MangaListItem[];
+  totalPages: number;
 }
 
 // --- API calls ---
 
-export async function getLatest(page = 1): Promise<MangaListItem[]> {
-  const data = await cachedFetch<{ list: MangaListItem[] }>(`${BASE}/api/latest/${page}`);
-  return data.list || [];
+export async function getHome(): Promise<HomeData> {
+  return scraperFetch<HomeData>({ action: "home" });
 }
 
-export async function getAll(page = 1): Promise<MangaListItem[]> {
-  const data = await cachedFetch<{ list: MangaListItem[] }>(`${BASE}/api/all/${page}`);
-  return data.list || [];
+export async function getLatest(page = 1): Promise<MangaListResponse> {
+  return scraperFetch<MangaListResponse>({ action: "latest", page: String(page) });
 }
 
-export async function getMangaInfo(slug: string): Promise<MangaInfo> {
-  return cachedFetch<MangaInfo>(`${BASE}/api/info/${slug}`);
+export async function getPopular(page = 1): Promise<MangaListResponse> {
+  return scraperFetch<MangaListResponse>({ action: "popular", page: String(page) });
 }
 
-export async function getChapterImages(mangaSlug: string, chapter: string): Promise<ChapterData> {
-  return cachedFetch<ChapterData>(`${BASE}/api/chapter/${mangaSlug}/${chapter}`);
+export async function searchManga(query: string, page = 1): Promise<SearchResponse> {
+  return scraperFetch<SearchResponse>({ action: "search", q: query, page: String(page) });
 }
 
-// --- Helpers ---
-
-/** Extract chapter identifier from a ch_list url like "/chapter/slug/ch-123" or similar */
-export function extractChapterFromUrl(url: string): string {
-  // url might be like "/title/uuid/chapter-id" or contain the chapter segment
-  const parts = url.split("/").filter(Boolean);
-  return parts[parts.length - 1] || "";
+export async function getMangaDetail(id: string): Promise<MangaDetail> {
+  return scraperFetch<MangaDetail>({ action: "detail", id });
 }
 
-/** Extract manga slug from a ch_list url */
-export function extractMangaSlugFromUrl(url: string): string {
-  const parts = url.split("/").filter(Boolean);
-  // Usually: /chapter/manga-slug/chapter-id  OR  /title/manga-slug/chapter-id
-  return parts.length >= 2 ? parts[parts.length - 2] : "";
+export async function getChapterImages(mangaId: string, chapterId: string): Promise<ChapterData> {
+  return scraperFetch<ChapterData>({ action: "read", chapter: chapterId });
 }
