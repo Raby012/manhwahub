@@ -1,13 +1,13 @@
 import { useState, useEffect } from "react";
 import { useParams, Link, useNavigate } from "react-router-dom";
-import { getMangaInfo, extractChapterFromUrl, type MangaInfo } from "@/lib/api";
+import { getMangaDetail, type MangaDetail } from "@/lib/api";
 import { addBookmark, removeBookmark, isBookmarked, getProgress, addRecentlyViewed } from "@/lib/storage";
 import { BookMarked, Play, ArrowLeft, Clock, ChevronDown, ChevronUp, Search } from "lucide-react";
 
 export default function ManhwaDetail() {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
-  const [info, setInfo] = useState<MangaInfo | null>(null);
+  const [info, setInfo] = useState<MangaDetail | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [bookmarked, setBookmarked] = useState(false);
@@ -19,11 +19,11 @@ export default function ManhwaDetail() {
     if (!id) return;
     setLoading(true);
     setError(null);
-    getMangaInfo(id)
+    getMangaDetail(id)
       .then((data) => {
         setInfo(data);
         setBookmarked(isBookmarked(id));
-        addRecentlyViewed({ id, title: data.page, coverUrl: data.poster, type: "manhwa", viewedAt: Date.now() });
+        addRecentlyViewed({ id, title: data.title, coverUrl: data.image, type: "manhwa", viewedAt: Date.now() });
       })
       .catch((e) => {
         console.error(e);
@@ -60,25 +60,23 @@ export default function ManhwaDetail() {
     );
   }
 
-  const chapters = info.ch_list || [];
+  const chapters = info.chapters || [];
   const progress = id ? getProgress(id) : null;
 
   const filteredChapters = chapters
-    .filter((c) => !chapterSearch || c.ch_title.toLowerCase().includes(chapterSearch.toLowerCase()))
-    .slice()
-    .sort((a, b) => sortAsc ? 0 : -1); // keep original order or reverse
+    .filter((c) => !chapterSearch || c.name.toLowerCase().includes(chapterSearch.toLowerCase()));
 
   const sortedChapters = sortAsc ? filteredChapters : [...filteredChapters].reverse();
   const displayChapters = showAllChapters ? sortedChapters : sortedChapters.slice(0, 50);
 
-  const firstChapterUrl = chapters.length > 0 ? extractChapterFromUrl(chapters[0].url) : null;
+  const firstChapterId = chapters.length > 0 ? chapters[chapters.length - 1].id : null;
 
   function toggleBookmark() {
     if (!id || !info) return;
     if (bookmarked) {
       removeBookmark(id);
     } else {
-      addBookmark({ id, title: info.page, coverUrl: info.poster, type: "manhwa", addedAt: Date.now() });
+      addBookmark({ id, title: info.title, coverUrl: info.image, type: "manhwa", addedAt: Date.now() });
     }
     setBookmarked(!bookmarked);
   }
@@ -92,17 +90,17 @@ export default function ManhwaDetail() {
 
         {/* Hero */}
         <div className="relative rounded-2xl overflow-hidden mb-8">
-          <div className="absolute inset-0 bg-cover bg-center opacity-20 blur-2xl" style={{ backgroundImage: `url(${info.poster})` }} />
+          <div className="absolute inset-0 bg-cover bg-center opacity-20 blur-2xl" style={{ backgroundImage: `url(${info.image})` }} />
           <div className="relative flex flex-col md:flex-row gap-6 p-6">
-            <img src={info.poster} alt={info.page} referrerPolicy="no-referrer" className="w-48 md:w-56 aspect-[3/4] object-cover rounded-xl shadow-2xl shadow-primary/10 shrink-0" />
+            <img src={info.image} alt={info.title} referrerPolicy="no-referrer" className="w-48 md:w-56 aspect-[3/4] object-cover rounded-xl shadow-2xl shadow-primary/10 shrink-0" />
             <div className="flex-1">
               {info.status && (
                 <span className={`px-3 py-1 text-xs font-semibold rounded-full uppercase mb-2 inline-block ${info.status.toLowerCase() === "completed" ? "bg-success/20 text-success" : "bg-primary/20 text-primary"}`}>
                   {info.status}
                 </span>
               )}
-              <h1 className="text-2xl md:text-3xl font-bold text-foreground mb-2">{info.page}</h1>
-              {info.authors && <p className="text-sm text-muted-foreground mb-3">Author: <span className="text-foreground">{info.authors}</span></p>}
+              <h1 className="text-2xl md:text-3xl font-bold text-foreground mb-2">{info.title}</h1>
+              {info.author && <p className="text-sm text-muted-foreground mb-3">Author: <span className="text-foreground">{info.author}</span></p>}
               <div className="flex flex-wrap gap-2 mb-4">
                 {info.genres.map((g) => (
                   <Link key={g} to={`/browse?genre=${g.toLowerCase()}`} className="px-2.5 py-1 text-xs bg-muted rounded-full text-muted-foreground hover:text-foreground hover:bg-primary/20 transition-colors">
@@ -113,9 +111,9 @@ export default function ManhwaDetail() {
               <p className="text-sm text-muted-foreground leading-relaxed mb-4 line-clamp-4">{info.description}</p>
 
               <div className="flex flex-wrap gap-3">
-                {firstChapterUrl && (
+                {firstChapterId && (
                   <Link
-                    to={`/read/${id}/${firstChapterUrl}`}
+                    to={`/read/${id}/${firstChapterId}`}
                     className="px-6 py-2.5 bg-primary text-primary-foreground rounded-lg font-medium text-sm hover:bg-primary/90 transition-colors flex items-center gap-2"
                   >
                     <Play className="w-4 h-4" /> Start Reading
@@ -162,23 +160,20 @@ export default function ManhwaDetail() {
           </div>
 
           <div className="space-y-1 max-h-[60vh] overflow-y-auto">
-            {displayChapters.map((ch, idx) => {
-              const chId = extractChapterFromUrl(ch.url);
-              return (
-                <Link
-                  key={idx}
-                  to={`/read/${id}/${chId}`}
-                  className="flex items-center justify-between px-3 py-2.5 rounded-lg hover:bg-muted/50 transition-colors group"
-                >
-                  <span className="text-sm font-medium text-foreground group-hover:text-primary transition-colors truncate">
-                    {ch.ch_title}
-                  </span>
-                  {ch.time && (
-                    <span className="text-xs text-muted-foreground shrink-0 ml-2">{ch.time}</span>
-                  )}
-                </Link>
-              );
-            })}
+            {displayChapters.map((ch, idx) => (
+              <Link
+                key={idx}
+                to={`/read/${id}/${ch.id}`}
+                className="flex items-center justify-between px-3 py-2.5 rounded-lg hover:bg-muted/50 transition-colors group"
+              >
+                <span className="text-sm font-medium text-foreground group-hover:text-primary transition-colors truncate">
+                  {ch.name}
+                </span>
+                {ch.date && (
+                  <span className="text-xs text-muted-foreground shrink-0 ml-2">{ch.date}</span>
+                )}
+              </Link>
+            ))}
           </div>
 
           {sortedChapters.length > 50 && !showAllChapters && (

@@ -43,17 +43,17 @@ export default function HeroBanner({ items = [] }: Props) {
       <div className="absolute inset-0 bg-gradient-to-t from-background via-transparent to-background/30" />
 
       <div className="relative h-full flex items-end p-6 md:p-10">
-        <div className="max-w-lg fade-in" key={m.slug}>
+        <div className="max-w-lg fade-in" key={m.id}>
           <h1 className="text-2xl md:text-4xl font-bold text-foreground mb-3 leading-tight">{m.title}</h1>
           <div className="flex gap-3">
             <Link
-              to={`/manhwa/${m.slug}`}
+              to={`/manhwa/${m.id}`}
               className="px-6 py-2.5 bg-primary text-primary-foreground rounded-lg font-medium text-sm hover:bg-primary/90 transition-colors"
             >
               Read Now
             </Link>
             <Link
-              to={`/manhwa/${m.slug}`}
+              to={`/manhwa/${m.id}`}
               className="px-6 py-2.5 bg-muted text-foreground rounded-lg font-medium text-sm hover:bg-muted/80 transition-colors"
             >
               Details
