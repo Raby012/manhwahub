@@ -112,5 +112,5 @@ export async function getMangaDetail(id: string): Promise<MangaDetail> {
 }
 
 export async function getChapterImages(mangaId: string, chapterId: string): Promise<ChapterData> {
-  return scraperFetch<ChapterData>({ action: "read", id: mangaId, chapter: chapterId });
+  return scraperFetch<ChapterData>({ action: "read", chapter: chapterId });
 }
