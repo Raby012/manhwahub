@@ -4,295 +4,175 @@ const corsHeaders = {
   "Access-Control-Allow-Methods": "GET, OPTIONS",
 };
 
-const BASE_URL = "https://www.mangakakalot.gg";
-const HEADERS = {
-  "User-Agent":
-    "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
-  Referer: "https://www.mangakakalot.gg/",
-  Accept:
-    "text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8",
-  "Accept-Language": "en-US,en;q=0.5",
-};
+const MANGADEX = "https://api.mangadex.org";
 
-// Simple HTML text extraction helpers (no cheerio in Deno edge functions)
-function extractBetween(html: string, startMarker: string, endMarker: string): string {
-  const startIdx = html.indexOf(startMarker);
-  if (startIdx === -1) return "";
-  const afterStart = startIdx + startMarker.length;
-  const endIdx = html.indexOf(endMarker, afterStart);
-  if (endIdx === -1) return html.substring(afterStart);
-  return html.substring(afterStart, endIdx);
+function getTitle(attrs: any): string {
+  return attrs.title?.en || attrs.title?.["ja-ro"] || attrs.title?.ja || Object.values(attrs.title || {})[0] as string || "Untitled";
 }
 
-function extractAll(html: string, startMarker: string, endMarker: string): string[] {
-  const results: string[] = [];
-  let pos = 0;
-  while (true) {
-    const startIdx = html.indexOf(startMarker, pos);
-    if (startIdx === -1) break;
-    const afterStart = startIdx + startMarker.length;
-    const endIdx = html.indexOf(endMarker, afterStart);
-    if (endIdx === -1) break;
-    results.push(html.substring(afterStart, endIdx));
-    pos = endIdx + endMarker.length;
+function getCover(manga: any): string {
+  const cover = manga.relationships?.find((r: any) => r.type === "cover_art");
+  if (cover?.attributes?.fileName) {
+    return `https://uploads.mangadex.org/covers/${manga.id}/${cover.attributes.fileName}.512.jpg`;
   }
-  return results;
+  return "";
 }
 
-function stripTags(html: string): string {
-  return html.replace(/<[^>]*>/g, "").trim();
-}
-
-function extractAttr(tag: string, attr: string): string {
-  const regex = new RegExp(`${attr}\\s*=\\s*["']([^"']*)["']`);
-  const match = tag.match(regex);
-  return match ? match[1] : "";
-}
-
-// ===== SCRAPING FUNCTIONS =====
-
-async function fetchHTML(url: string): Promise<string> {
-  const res = await fetch(url, { headers: HEADERS });
-  if (!res.ok) throw new Error(`Failed to fetch ${url}: ${res.status}`);
-  return res.text();
-}
-
-async function scrapeLatest(page: number) {
-  const url = `${BASE_URL}/manga-list/latest-manga${page > 1 ? "?page=" + page : ""}`;
-  const html = await fetchHTML(url);
-  return parseMangaList(html);
-}
-
-async function scrapePopular(page: number) {
-  const url = `${BASE_URL}/manga-list/hot-manga${page > 1 ? "?page=" + page : ""}`;
-  const html = await fetchHTML(url);
-  return parseMangaList(html);
-}
-
-async function scrapeSearch(query: string, page: number) {
-  const encoded = encodeURIComponent(query).replace(/%20/g, "_");
-  const url = `${BASE_URL}/search/story/${encoded}${page > 1 ? "?page=" + page : ""}`;
-  const html = await fetchHTML(url);
-  return parseSearchResults(html);
-}
-
-async function scrapeDetail(mangaId: string) {
-  const url = `${BASE_URL}/manga/${mangaId}`;
-  const html = await fetchHTML(url);
-  return parseMangaDetail(html, mangaId);
-}
-
-async function scrapeChapter(mangaId: string, chapterId: string) {
-  const url = `${BASE_URL}/manga/${mangaId}/${chapterId}`;
-  const html = await fetchHTML(url);
-  return parseChapterImages(html, mangaId, chapterId);
-}
-
-async function scrapeHome() {
-  const html = await fetchHTML(BASE_URL);
-  return parseHomePage(html);
-}
-
-// ===== PARSING FUNCTIONS =====
-
-function parseMangaList(html: string) {
-  const mangas: any[] = [];
-
-  // Extract each manga item from list
-  const items = extractAll(html, '<div class="list-truyen-item-wrap"', '</div>');
-
-  for (const item of items) {
-    // Get link and title from h3 > a
-    const h3Content = extractBetween(item, "<h3", "</h3>");
-    const linkTag = extractBetween(h3Content, "<a", "</a>");
-    const href = extractAttr("<a" + linkTag, "href");
-    const title = stripTags(linkTag);
-    const id = href ? href.split("/manga/")[1] : "";
-
-    // Get image
-    const imgMatch = item.match(/<img[^>]*src\s*=\s*["']([^"']+)["']/);
-    const image = imgMatch ? imgMatch[1] : "";
-
-    // Get latest chapter
-    const chapterMatch = item.match(/list-story-item-wrap-chapter[^>]*>([^<]*)</);
-    const latestChapter = chapterMatch ? chapterMatch[1].trim() : "";
-
-    if (id && title) {
-      mangas.push({ id, title, image, latestChapter });
-    }
+function getCoverThumb(manga: any): string {
+  const cover = manga.relationships?.find((r: any) => r.type === "cover_art");
+  if (cover?.attributes?.fileName) {
+    return `https://uploads.mangadex.org/covers/${manga.id}/${cover.attributes.fileName}.256.jpg`;
   }
-
-  // Pagination
-  const totalPagesMatch = html.match(/Last\((\d+)\)/);
-  const totalPages = totalPagesMatch ? parseInt(totalPagesMatch[1]) : 1;
-  const currentPageMatch = html.match(/class="page_select">(\d+)</);
-  const currentPage = currentPageMatch ? parseInt(currentPageMatch[1]) : 1;
-
-  return { mangas, currentPage, totalPages, hasNextPage: currentPage < totalPages };
+  return "";
 }
 
-function parseSearchResults(html: string) {
-  const mangas: any[] = [];
-
-  // Search results use .story_item class
-  const storySection = html.split('class="panel_story_list"')[1] || html;
-  const items = storySection.split('class="story_item"').slice(1);
-
-  for (const item of items) {
-    // Title and link
-    const nameSection = extractBetween(item, 'class="story_name"', "</a>");
-    const hrefMatch = nameSection.match(/href\s*=\s*["']([^"']+)["']/);
-    const href = hrefMatch ? hrefMatch[1] : "";
-    const title = stripTags(nameSection);
-    const id = href ? href.split("/manga/")[1]?.split('"')[0] : "";
-
-    // Image
-    const imgMatch = item.match(/<img[^>]*src\s*=\s*["']([^"']+)["']/);
-    const image = imgMatch ? imgMatch[1] : "";
-
-    // Author
-    const authorMatch = item.match(/Author[^:]*:\s*<\/span>\s*([^<]*)/);
-    const author = authorMatch ? authorMatch[1].trim() : "";
-
-    if (id && title) {
-      mangas.push({ id, title, image, author });
-    }
-  }
-
-  const totalPagesMatch = html.match(/Last\((\d+)\)/);
-  const totalPages = totalPagesMatch ? parseInt(totalPagesMatch[1]) : 1;
-
-  return { mangas, totalPages };
+function getAuthor(manga: any): string {
+  const author = manga.relationships?.find((r: any) => r.type === "author");
+  return author?.attributes?.name || "";
 }
 
-function parseMangaDetail(html: string, mangaId: string) {
-  // Title
-  const titleMatch = html.match(/<h1[^>]*>([^<]+)<\/h1>/);
-  const title = titleMatch ? titleMatch[1].trim() : "";
+async function mdFetch(path: string) {
+  const res = await fetch(`${MANGADEX}${path}`, {
+    headers: { "User-Agent": "ManhwaHub/1.0" },
+  });
+  if (!res.ok) throw new Error(`MangaDex error: ${res.status}`);
+  return res.json();
+}
 
-  // Image
-  const picSection = extractBetween(html, 'class="manga-info-pic"', "</div>");
-  const imgMatch = picSection.match(/<img[^>]*src\s*=\s*["']([^"']+)["']/);
-  const image = imgMatch ? imgMatch[1] : "";
+// ===== API FUNCTIONS =====
 
-  // Author
-  const authorMatch = html.match(/Author[^:]*:\s*<\/td>\s*<td[^>]*>([\s\S]*?)<\/td>/i) 
-    || html.match(/Author[^:]*:[^<]*<\/li>/i);
-  let author = "";
-  if (authorMatch) {
-    author = stripTags(authorMatch[1] || authorMatch[0]).replace(/Author\(s\)\s*:/i, "").trim();
-  }
+async function getPopular(page: number) {
+  const offset = (page - 1) * 24;
+  const data = await mdFetch(
+    `/manga?limit=24&offset=${offset}&order[followedCount]=desc&contentRating[]=safe&contentRating[]=suggestive&includes[]=cover_art&includes[]=author&availableTranslatedLanguage[]=en`
+  );
+  return {
+    mangas: data.data.map((m: any) => ({
+      id: m.id,
+      title: getTitle(m.attributes),
+      image: getCoverThumb(m),
+      author: getAuthor(m),
+      status: m.attributes.status,
+    })),
+    total: data.total,
+    currentPage: page,
+    totalPages: Math.ceil(data.total / 24),
+    hasNextPage: offset + 24 < data.total,
+  };
+}
 
-  // Status
-  const statusMatch = html.match(/Status\s*:\s*<\/td>\s*<td[^>]*>([^<]+)/i)
-    || html.match(/Status\s*:\s*([^<\n]+)/i);
-  const status = statusMatch ? stripTags(statusMatch[1]).trim() : "";
+async function getLatest(page: number) {
+  const offset = (page - 1) * 24;
+  const data = await mdFetch(
+    `/manga?limit=24&offset=${offset}&order[latestUploadedChapter]=desc&contentRating[]=safe&contentRating[]=suggestive&includes[]=cover_art&includes[]=author&availableTranslatedLanguage[]=en`
+  );
+  return {
+    mangas: data.data.map((m: any) => ({
+      id: m.id,
+      title: getTitle(m.attributes),
+      image: getCoverThumb(m),
+      author: getAuthor(m),
+      status: m.attributes.status,
+    })),
+    total: data.total,
+    currentPage: page,
+    totalPages: Math.ceil(data.total / 24),
+    hasNextPage: offset + 24 < data.total,
+  };
+}
 
-  // Genres
-  const genres: string[] = [];
-  const genreMatches = html.match(/class="genres"[^>]*>([\s\S]*?)<\/li>/);
-  if (genreMatches) {
-    const genreLinks = genreMatches[1].match(/<a[^>]*>([^<]+)<\/a>/g) || [];
-    for (const g of genreLinks) {
-      genres.push(stripTags(g));
-    }
-  }
+async function searchManga(query: string, page: number) {
+  const offset = (page - 1) * 24;
+  const data = await mdFetch(
+    `/manga?limit=24&offset=${offset}&title=${encodeURIComponent(query)}&contentRating[]=safe&contentRating[]=suggestive&includes[]=cover_art&includes[]=author&availableTranslatedLanguage[]=en&order[relevance]=desc`
+  );
+  return {
+    mangas: data.data.map((m: any) => ({
+      id: m.id,
+      title: getTitle(m.attributes),
+      image: getCoverThumb(m),
+      author: getAuthor(m),
+      status: m.attributes.status,
+    })),
+    total: data.total,
+    totalPages: Math.ceil(data.total / 24),
+  };
+}
 
-  // Description
-  const descMatch = html.match(/id="contentBox"[^>]*>([\s\S]*?)<\/div>/i)
-    || html.match(/id="panel-story-info-description"[^>]*>([\s\S]*?)<\/div>/i);
-  const description = descMatch ? stripTags(descMatch[1]).replace(/Description\s*:/i, "").trim() : "";
+async function getMangaDetail(id: string) {
+  const [mangaRes, chaptersRes] = await Promise.all([
+    mdFetch(`/manga/${id}?includes[]=cover_art&includes[]=author&includes[]=artist`),
+    mdFetch(`/manga/${id}/feed?limit=500&translatedLanguage[]=en&order[chapter]=asc&includes[]=scanlation_group`),
+  ]);
 
-  // Chapters
-  const chapters: any[] = [];
-  const chapterSection = html.split('class="chapter-list"')[1] || html.split('class="row-content-chapter"')[1] || "";
-  
-  // Try both formats
-  const chapterRows = chapterSection ? chapterSection.split('class="row"').slice(1) : [];
-  
-  if (chapterRows.length > 0) {
-    for (const row of chapterRows) {
-      const linkMatch = row.match(/<a[^>]*href\s*=\s*["']([^"']+)["'][^>]*>([^<]+)<\/a>/);
-      if (linkMatch) {
-        const chapterUrl = linkMatch[1];
-        const chapterName = linkMatch[2].trim();
-        const chapterId = chapterUrl.split("/").pop() || "";
-        const dateMatch = row.match(/<span[^>]*title\s*=\s*["']([^"']+)["']/);
-        const date = dateMatch ? dateMatch[1] : "";
-        chapters.push({ id: chapterId, name: chapterName, date });
-      }
-    }
-  } else {
-    // Try alternate format: ul > li > a
-    const chapterLinks = chapterSection ? 
-      (chapterSection.match(/<li[^>]*>[\s\S]*?<\/li>/g) || []) : [];
-    for (const li of chapterLinks) {
-      const linkMatch = li.match(/<a[^>]*href\s*=\s*["']([^"']+)["'][^>]*>([^<]+)<\/a>/);
-      if (linkMatch) {
-        const chapterUrl = linkMatch[1];
-        const chapterName = linkMatch[2].trim();
-        const chapterId = chapterUrl.split("/").pop() || "";
-        chapters.push({ id: chapterId, name: chapterName, date: "" });
-      }
-    }
-  }
+  const manga = mangaRes.data;
+  const attrs = manga.attributes;
+
+  // Deduplicate chapters by chapter number (keep first)
+  const seen = new Set<string>();
+  const chapters = chaptersRes.data
+    .filter((c: any) => {
+      const num = c.attributes.chapter || c.id;
+      if (seen.has(num)) return false;
+      seen.add(num);
+      return true;
+    })
+    .map((c: any) => ({
+      id: c.id,
+      name: `Chapter ${c.attributes.chapter || "?"}${c.attributes.title ? " - " + c.attributes.title : ""}`,
+      chapter: c.attributes.chapter,
+      date: c.attributes.publishAt?.split("T")[0] || "",
+    }));
+
+  const description = attrs.description?.en || attrs.description?.["ja-ro"] || Object.values(attrs.description || {})[0] as string || "";
 
   return {
-    id: mangaId,
-    title,
-    image,
-    author,
-    status,
-    genres,
+    id: manga.id,
+    title: getTitle(attrs),
+    image: getCover(manga),
+    author: getAuthor(manga),
+    status: attrs.status || "",
+    genres: (attrs.tags || [])
+      .filter((t: any) => t.attributes?.group === "genre")
+      .map((t: any) => t.attributes.name?.en || ""),
     description,
     chapters,
   };
 }
 
-function parseChapterImages(html: string, mangaId: string, chapterId: string) {
-  const images: string[] = [];
+async function getChapterImages(chapterId: string) {
+  const atHomeRes = await fetch(`${MANGADEX}/at-home/server/${chapterId}`);
+  if (!atHomeRes.ok) throw new Error(`at-home error: ${atHomeRes.status}`);
+  const atHome = await atHomeRes.json();
 
-  // Extract images from container-chapter-reader
-  const readerSection = html.split("container-chapter-reader")[1] || html;
-  const imgMatches = readerSection.match(/<img[^>]*src\s*=\s*["']([^"']+)["'][^>]*>/g) || [];
+  const baseUrl = atHome.baseUrl;
+  const hash = atHome.chapter.hash;
+  const images = atHome.chapter.data.map((f: string) => `${baseUrl}/data/${hash}/${f}`);
 
-  for (const imgTag of imgMatches) {
-    const src = extractAttr(imgTag, "src");
-    if (src && (src.includes("mangakakalot") || src.includes("mangaimage") || src.includes("chapmanganato") || src.includes("avt.mkklcdnv6temp") || src.includes("cm.") || src.includes("blog"))) {
-      images.push(src);
-    }
-  }
+  // Get chapter info for navigation
+  const chapterRes = await mdFetch(`/chapter/${chapterId}?includes[]=manga`);
+  const chapter = chapterRes.data;
+  const mangaId = chapter.relationships?.find((r: any) => r.type === "manga")?.id || "";
+  const chapterNum = chapter.attributes.chapter;
 
-  // Also try data-src
-  if (images.length === 0) {
-    const dataSrcMatches = readerSection.match(/data-src\s*=\s*["']([^"']+)["']/g) || [];
-    for (const match of dataSrcMatches) {
-      const src = match.replace(/data-src\s*=\s*["']/, "").replace(/["']$/, "");
-      if (src.startsWith("http")) images.push(src);
-    }
-  }
-
-  // Navigation
+  // Get prev/next chapters
   let prevChapter: string | null = null;
   let nextChapter: string | null = null;
 
-  const prevMatch = html.match(/class="[^"]*next[^"]*"[^>]*href\s*=\s*["']([^"']+)["']/);
-  if (prevMatch) prevChapter = prevMatch[1].split("/").pop() || null;
+  if (mangaId && chapterNum) {
+    const num = parseFloat(chapterNum);
+    // Get next
+    const nextRes = await mdFetch(
+      `/manga/${mangaId}/feed?limit=1&translatedLanguage[]=en&order[chapter]=asc&chapter[]=${num + 1}`
+    );
+    if (nextRes.data.length > 0) nextChapter = nextRes.data[0].id;
 
-  const nextMatch = html.match(/class="[^"]*back[^"]*"[^>]*href\s*=\s*["']([^"']+)["']/);
-  if (nextMatch) nextChapter = nextMatch[1].split("/").pop() || null;
-
-  // Also try navi-change-chapter buttons
-  if (!prevChapter || !nextChapter) {
-    const navBtns = html.match(/<a[^>]*class="[^"]*navi-change-chapter-btn[^"]*"[^>]*href="([^"]+)"[^>]*>/g) || [];
-    for (const btn of navBtns) {
-      const href = extractAttr(btn, "href");
-      if (btn.includes("PREV") || btn.includes("prev")) {
-        prevChapter = href.split("/").pop() || null;
-      }
-      if (btn.includes("NEXT") || btn.includes("next")) {
-        nextChapter = href.split("/").pop() || null;
-      }
+    // Get prev
+    if (num > 1) {
+      const prevRes = await mdFetch(
+        `/manga/${mangaId}/feed?limit=1&translatedLanguage[]=en&order[chapter]=desc&chapter[]=${num - 1}`
+      );
+      if (prevRes.data.length > 0) prevChapter = prevRes.data[0].id;
     }
   }
 
@@ -305,41 +185,24 @@ function parseChapterImages(html: string, mangaId: string, chapterId: string) {
   };
 }
 
-function parseHomePage(html: string) {
-  const popular: any[] = [];
-  const latest: any[] = [];
+async function getHome() {
+  const [popularRes, latestRes] = await Promise.all([
+    mdFetch(`/manga?limit=10&order[followedCount]=desc&contentRating[]=safe&contentRating[]=suggestive&includes[]=cover_art&availableTranslatedLanguage[]=en`),
+    mdFetch(`/manga?limit=18&order[latestUploadedChapter]=desc&contentRating[]=safe&contentRating[]=suggestive&includes[]=cover_art&availableTranslatedLanguage[]=en`),
+  ]);
 
-  // Popular slider
-  const sliderItems = html.split('class="item"').slice(1, 11);
-  for (const item of sliderItems) {
-    const linkMatch = item.match(/<a[^>]*href\s*=\s*["']([^"']+)["'][^>]*>([^<]*)<\/a>/);
-    const imgMatch = item.match(/<img[^>]*src\s*=\s*["']([^"']+)["']/);
-    if (linkMatch) {
-      const href = linkMatch[1];
-      const title = linkMatch[2].trim() || stripTags(extractBetween(item, "<h3", "</h3>"));
-      const id = href.split("/manga/")[1] || "";
-      const image = imgMatch ? imgMatch[1] : "";
-      if (id && title) popular.push({ id, title, image });
-    }
-  }
-
-  // Latest updates
-  const updateSection = html.split("contentstory")[1] || "";
-  const updateItems = updateSection.split("itemupdate").slice(1, 25);
-  for (const item of updateItems) {
-    const h3 = extractBetween(item, "<h3", "</h3>");
-    const linkMatch = h3.match(/<a[^>]*href\s*=\s*["']([^"']+)["'][^>]*>([^<]*)<\/a>/);
-    const imgMatch = item.match(/<img[^>]*(?:src|data-src)\s*=\s*["']([^"']+)["']/);
-    if (linkMatch) {
-      const href = linkMatch[1];
-      const title = linkMatch[2].trim();
-      const id = href.split("/manga/")[1] || "";
-      const image = imgMatch ? imgMatch[1] : "";
-      if (id && title) latest.push({ id, title, image });
-    }
-  }
-
-  return { popular, latest };
+  return {
+    popular: popularRes.data.map((m: any) => ({
+      id: m.id,
+      title: getTitle(m.attributes),
+      image: getCover(m),
+    })),
+    latest: latestRes.data.map((m: any) => ({
+      id: m.id,
+      title: getTitle(m.attributes),
+      image: getCoverThumb(m),
+    })),
+  };
 }
 
 // ===== MAIN HANDLER =====
@@ -361,24 +224,24 @@ Deno.serve(async (req) => {
 
     switch (action) {
       case "home":
-        data = await scrapeHome();
+        data = await getHome();
         break;
       case "latest":
-        data = await scrapeLatest(page);
+        data = await getLatest(page);
         break;
       case "popular":
-        data = await scrapePopular(page);
+        data = await getPopular(page);
         break;
       case "search":
-        data = await scrapeSearch(query, page);
+        data = await searchManga(query, page);
         break;
       case "detail":
         if (!id) throw new Error("Missing 'id' parameter");
-        data = await scrapeDetail(id);
+        data = await getMangaDetail(id);
         break;
       case "read":
-        if (!id || !chapter) throw new Error("Missing 'id' or 'chapter' parameter");
-        data = await scrapeChapter(id, chapter);
+        if (!chapter) throw new Error("Missing 'chapter' parameter");
+        data = await getChapterImages(chapter);
         break;
       default:
         throw new Error(`Unknown action: ${action}`);
@@ -390,7 +253,7 @@ Deno.serve(async (req) => {
   } catch (error) {
     console.error("Scraper error:", error);
     return new Response(
-      JSON.stringify({ error: error.message || "Scraping failed" }),
+      JSON.stringify({ error: error.message || "Failed to fetch data" }),
       { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
     );
   }
