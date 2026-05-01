@@ -1,187 +1,156 @@
-import { useState, useEffect, useCallback, useRef } from "react";
-import { useParams, useNavigate, Link } from "react-router-dom";
-import { getChapterImages, type ChapterData } from "@/lib/api";
-import { setProgress, markChapterRead } from "@/lib/storage";
-import { ArrowLeft, RefreshCw, ChevronLeft, ChevronRight } from "lucide-react";
+import { useEffect, useState, useCallback } from "react";
+import { Link, useNavigate, useParams } from "react-router-dom";
+import {
+  getChapterPages,
+  getChapters,
+  getMangaInfo,
+  PROXY_IMG,
+  type MangaSource,
+  type ChapterItem,
+} from "@/lib/api";
+import { pushHistory } from "@/lib/storage";
+import { ArrowLeft, ChevronLeft, ChevronRight, RefreshCw } from "lucide-react";
 
 export default function Reader() {
-  const { manhwaId, chapterId } = useParams<{ manhwaId: string; chapterId: string }>();
+  const { source, id, chapterId } = useParams<{ source: MangaSource; id: string; chapterId: string }>();
   const navigate = useNavigate();
-  const [chapterData, setChapterData] = useState<ChapterData | null>(null);
+  const [pages, setPages] = useState<string[]>([]);
+  const [chapters, setChapters] = useState<ChapterItem[]>([]);
+  const [info, setInfo] = useState<{ title: string; cover?: string; contentType?: string } | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [imgLoaded, setImgLoaded] = useState<Set<number>>(new Set());
-  const [imgErrors, setImgErrors] = useState<Set<number>>(new Set());
-  const [showUI, setShowUI] = useState(true);
-  const hideTimerRef = useRef<ReturnType<typeof setTimeout>>();
+  const [imgErr, setImgErr] = useState<Set<number>>(new Set());
 
-  const loadChapter = useCallback(async () => {
-    if (!manhwaId || !chapterId) return;
+  const load = useCallback(async () => {
+    if (!source || !id || !chapterId) return;
     setLoading(true);
     setError(null);
-    setChapterData(null);
-    setImgLoaded(new Set());
-    setImgErrors(new Set());
-
+    setPages([]);
+    setImgErr(new Set());
     try {
-      const data = await getChapterImages(manhwaId, chapterId);
-
-      if (!data.images || data.images.length === 0) {
-        throw new Error("No pages found for this chapter.");
+      const [pg, info, ch] = await Promise.all([
+        getChapterPages(id, chapterId, source),
+        getMangaInfo(id, source).catch(() => null),
+        getChapters(id, source, 1).catch(() => ({ chapters: [] as ChapterItem[] })),
+      ]);
+      if (!pg.pages || pg.pages.length === 0) throw new Error("No pages found in this chapter.");
+      setPages(pg.pages);
+      setChapters(ch.chapters || []);
+      if (info) {
+        setInfo({ title: info.title, cover: info.coverUrl, contentType: info.contentType });
+        const current = (ch.chapters || []).find((c) => c.id === chapterId);
+        pushHistory({
+          source,
+          id,
+          title: info.title,
+          cover: info.coverUrl,
+          chapterId,
+          chapterLabel: current ? `Ch. ${current.chapter}` : "Reading",
+        });
       }
-
-      setChapterData(data);
-      markChapterRead(manhwaId, chapterId);
-      setProgress({ mangaId: manhwaId, chapterId, chapterNumber: chapterId, page: 0, timestamp: Date.now() });
-    } catch (err: any) {
-      console.error("Failed to load chapter:", err);
-      setError(err.message || "Failed to load chapter. Please try again.");
+    } catch (e: any) {
+      setError(e.message || "Failed to load chapter.");
     } finally {
       setLoading(false);
     }
-  }, [manhwaId, chapterId]);
+  }, [source, id, chapterId]);
 
   useEffect(() => {
-    loadChapter();
-  }, [loadChapter]);
+    load();
+    window.scrollTo(0, 0);
+  }, [load]);
 
-  const retryPage = (idx: number) => {
-    if (!chapterData) return;
-    setImgErrors((prev) => { const s = new Set(prev); s.delete(idx); return s; });
-    setImgLoaded((prev) => { const s = new Set(prev); s.delete(idx); return s; });
-    setChapterData((prev) => {
-      if (!prev) return prev;
-      const updated = [...prev.images];
-      const base = updated[idx].split("?")[0];
-      updated[idx] = `${base}?t=${Date.now()}`;
-      return { ...prev, images: updated };
-    });
-  };
+  // chapters list often newest-first → prev = newer, next = older. We invert: "next" = next chronological number.
+  const sorted = [...chapters].sort((a, b) => parseFloat(a.chapter) - parseFloat(b.chapter));
+  const idx = sorted.findIndex((c) => c.id === chapterId);
+  const prevCh = idx > 0 ? sorted[idx - 1] : null;
+  const nextCh = idx >= 0 && idx < sorted.length - 1 ? sorted[idx + 1] : null;
 
-  const goNext = useCallback(() => {
-    if (chapterData?.nextChapter && manhwaId) {
-      navigate(`/read/${manhwaId}/${chapterData.nextChapter}`);
-    }
-  }, [chapterData, manhwaId, navigate]);
-
-  const goPrev = useCallback(() => {
-    if (chapterData?.prevChapter && manhwaId) {
-      navigate(`/read/${manhwaId}/${chapterData.prevChapter}`);
-    }
-  }, [chapterData, manhwaId, navigate]);
-
-  function handleMouseMove() {
-    setShowUI(true);
-    if (hideTimerRef.current) clearTimeout(hideTimerRef.current);
-    hideTimerRef.current = setTimeout(() => setShowUI(false), 3000);
+  function go(ch: ChapterItem | null) {
+    if (!ch || !source || !id) return;
+    navigate(`/manga/${source}/${encodeURIComponent(id)}/chapter/${encodeURIComponent(ch.id)}`);
   }
-
-  if (loading) {
-    return (
-      <div className="min-h-screen flex flex-col items-center justify-center bg-background gap-4">
-        <div className="w-8 h-8 border-2 border-primary border-t-transparent rounded-full animate-spin" />
-        <p className="text-sm text-muted-foreground">Loading chapter...</p>
-      </div>
-    );
-  }
-
-  if (error) {
-    return (
-      <div className="min-h-screen flex flex-col items-center justify-center bg-background gap-4 px-4 text-center">
-        <p className="text-muted-foreground">{error}</p>
-        <div className="flex gap-3">
-          <button onClick={loadChapter} className="px-6 py-2.5 bg-primary text-primary-foreground rounded-lg text-sm font-medium flex items-center gap-2 hover:bg-primary/90 transition-colors">
-            <RefreshCw className="w-4 h-4" /> Retry
-          </button>
-          <Link to={`/manhwa/${manhwaId}`} className="px-6 py-2.5 bg-muted text-foreground rounded-lg text-sm font-medium hover:bg-muted/80 transition-colors">
-            Go Back
-          </Link>
-        </div>
-      </div>
-    );
-  }
-
-  const images = chapterData?.images || [];
 
   return (
-    <div className="min-h-screen bg-background transition-colors" onMouseMove={handleMouseMove}>
+    <div className="min-h-screen bg-background">
       {/* Top bar */}
-      <div className={`fixed top-0 left-0 right-0 z-50 bg-background/95 backdrop-blur-xl border-b border-border transition-transform duration-300 ${showUI ? "translate-y-0" : "-translate-y-full"}`}>
-        <div className="flex items-center justify-between px-4 h-14">
-          <Link to={`/manhwa/${manhwaId}`} className="p-1 text-muted-foreground hover:text-foreground transition-colors flex items-center gap-2">
-            <ArrowLeft className="w-5 h-5" />
-            <span className="text-sm">Back to details</span>
+      <div className="sticky top-0 z-40 bg-background/95 backdrop-blur-xl border-b border-border">
+        <div className="flex items-center justify-between gap-3 px-4 h-14">
+          <Link to={source && id ? `/manga/${source}/${encodeURIComponent(id)}` : "/"} className="flex items-center gap-2 text-muted-foreground hover:text-foreground text-sm">
+            <ArrowLeft className="w-4 h-4" />
+            <span className="truncate max-w-[40vw]">{info?.title ?? "Back"}</span>
           </Link>
+          <div className="flex items-center gap-2">
+            <button onClick={() => go(prevCh)} disabled={!prevCh} className="p-2 rounded-md bg-muted text-muted-foreground hover:text-foreground disabled:opacity-30">
+              <ChevronLeft className="w-4 h-4" />
+            </button>
+            <button onClick={() => go(nextCh)} disabled={!nextCh} className="p-2 rounded-md bg-muted text-muted-foreground hover:text-foreground disabled:opacity-30">
+              <ChevronRight className="w-4 h-4" />
+            </button>
+          </div>
         </div>
       </div>
 
-      {/* Vertical scroll reader */}
-      <div className="pt-14 pb-16">
-        <div className="max-w-3xl mx-auto">
-          {images.map((url, idx) => (
-            <div key={`${idx}-${url}`} className="relative">
-              {imgErrors.has(idx) ? (
-                <div className="w-full aspect-[2/3] bg-muted flex flex-col items-center justify-center gap-3 text-muted-foreground text-sm">
-                  <p>Failed to load page {idx + 1}</p>
-                  <button
-                    onClick={() => retryPage(idx)}
-                    className="px-4 py-2 bg-primary text-primary-foreground rounded-lg text-xs font-medium flex items-center gap-2 hover:bg-primary/90 transition-colors"
-                  >
-                    <RefreshCw className="w-3 h-3" /> Retry
-                  </button>
-                </div>
-              ) : (
-                <>
-                  {!imgLoaded.has(idx) && (
-                    <div className="w-full aspect-[2/3] bg-muted animate-pulse flex items-center justify-center">
-                      <span className="text-xs text-muted-foreground">Loading page {idx + 1}...</span>
-                    </div>
-                  )}
+      {/* Body */}
+      {loading ? (
+        <div className="min-h-[60vh] flex flex-col items-center justify-center gap-4">
+          <div className="w-8 h-8 border-2 border-primary border-t-transparent rounded-full animate-spin" />
+          <p className="text-sm text-muted-foreground">Loading chapter...</p>
+        </div>
+      ) : error ? (
+        <div className="min-h-[60vh] flex flex-col items-center justify-center gap-4 px-4 text-center">
+          <p className="text-muted-foreground">{error}</p>
+          <button onClick={load} className="px-5 py-2 bg-primary text-primary-foreground rounded-lg text-sm flex items-center gap-2">
+            <RefreshCw className="w-4 h-4" /> Retry
+          </button>
+        </div>
+      ) : (
+        <div className="max-w-3xl mx-auto pb-16">
+          {pages.map((url, i) => {
+            const proxied = PROXY_IMG(url);
+            return (
+              <div key={i} className="relative">
+                {imgErr.has(i) ? (
+                  <div className="w-full aspect-[2/3] bg-muted flex flex-col items-center justify-center gap-3 text-muted-foreground text-sm">
+                    <p>Failed to load page {i + 1}</p>
+                    <button
+                      onClick={() => setImgErr((s) => { const n = new Set(s); n.delete(i); return n; })}
+                      className="px-4 py-2 bg-primary text-primary-foreground rounded-lg text-xs flex items-center gap-2"
+                    >
+                      <RefreshCw className="w-3 h-3" /> Retry
+                    </button>
+                  </div>
+                ) : (
                   <img
-                    src={url}
-                    alt={`Page ${idx + 1}`}
-                    loading={idx < 3 ? "eager" : "lazy"}
+                    src={proxied}
+                    alt={`Page ${i + 1}`}
+                    loading={i < 3 ? "eager" : "lazy"}
                     referrerPolicy="no-referrer"
-                    className={`w-full ${imgLoaded.has(idx) ? "" : "h-0 overflow-hidden"}`}
-                    onLoad={() => setImgLoaded((prev) => new Set(prev).add(idx))}
-                    onError={() => setImgErrors((prev) => new Set(prev).add(idx))}
+                    className="w-full block bg-muted"
+                    onError={() => setImgErr((s) => new Set(s).add(i))}
                   />
-                </>
-              )}
-            </div>
-          ))}
+                )}
+              </div>
+            );
+          })}
 
-          {/* Next/prev chapter prompt */}
           <div className="py-12 text-center flex flex-col items-center gap-4">
-            <p className="text-muted-foreground">End of chapter</p>
+            <p className="text-muted-foreground text-sm">End of chapter</p>
             <div className="flex gap-3">
-              {chapterData?.prevChapter && (
-                <button onClick={goPrev} className="px-6 py-3 bg-muted text-foreground rounded-lg font-medium hover:bg-muted/80 transition-colors flex items-center gap-2">
+              {prevCh && (
+                <button onClick={() => go(prevCh)} className="px-5 py-2.5 bg-muted rounded-lg flex items-center gap-2">
                   <ChevronLeft className="w-4 h-4" /> Previous
                 </button>
               )}
-              {chapterData?.nextChapter && (
-                <button onClick={goNext} className="px-8 py-3 bg-primary text-primary-foreground rounded-lg font-medium hover:bg-primary/90 transition-colors flex items-center gap-2">
-                  Next Chapter <ChevronRight className="w-4 h-4" />
+              {nextCh && (
+                <button onClick={() => go(nextCh)} className="px-6 py-2.5 bg-primary text-primary-foreground rounded-lg flex items-center gap-2">
+                  Next <ChevronRight className="w-4 h-4" />
                 </button>
               )}
             </div>
           </div>
         </div>
-      </div>
-
-      {/* Bottom bar */}
-      <div className={`fixed bottom-0 left-0 right-0 z-50 bg-background/95 backdrop-blur-xl border-t border-border transition-transform duration-300 ${showUI ? "translate-y-0" : "translate-y-full"}`}>
-        <div className="flex items-center justify-between px-4 h-12">
-          <button onClick={goPrev} disabled={!chapterData?.prevChapter} className="flex items-center gap-1 text-sm text-muted-foreground hover:text-foreground disabled:opacity-30 transition-colors">
-            <ChevronLeft className="w-4 h-4" /> Prev
-          </button>
-          <span className="text-xs text-muted-foreground">{images.length} pages</span>
-          <button onClick={goNext} disabled={!chapterData?.nextChapter} className="flex items-center gap-1 text-sm text-muted-foreground hover:text-foreground disabled:opacity-30 transition-colors">
-            Next <ChevronRight className="w-4 h-4" />
-          </button>
-        </div>
-      </div>
+      )}
     </div>
   );
 }
