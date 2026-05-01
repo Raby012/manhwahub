@@ -1,19 +1,22 @@
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { BrowserRouter, Route, Routes } from "react-router-dom";
-import { Toaster as Sonner } from "@/components/ui/sonner";
+import { Toaster } from "@/components/ui/sonner";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import Navbar from "@/components/Navbar";
-import Index from "./pages/Index";
-import Browse from "./pages/Browse";
-import ManhwaDetail from "./pages/ManhwaDetail";
+import Home from "./pages/Home";
+import SearchPage from "./pages/SearchPage";
+import MangaDetail from "./pages/MangaDetail";
 import Reader from "./pages/Reader";
+import NovelsHome from "./pages/NovelsHome";
+import NovelDetail from "./pages/NovelDetail";
+import NovelReader from "./pages/NovelReader";
 import Bookmarks from "./pages/Bookmarks";
 import History from "./pages/History";
 import NotFound from "./pages/NotFound";
 
 const queryClient = new QueryClient();
 
-function LayoutWithNav({ children }: { children: React.ReactNode }) {
+function Layout({ children }: { children: React.ReactNode }) {
   return (
     <>
       <Navbar />
@@ -25,16 +28,19 @@ function LayoutWithNav({ children }: { children: React.ReactNode }) {
 const App = () => (
   <QueryClientProvider client={queryClient}>
     <TooltipProvider>
-      <Sonner />
+      <Toaster />
       <BrowserRouter>
         <Routes>
-          <Route path="/" element={<LayoutWithNav><Index /></LayoutWithNav>} />
-          <Route path="/browse" element={<LayoutWithNav><Browse /></LayoutWithNav>} />
-          <Route path="/manhwa/:id" element={<LayoutWithNav><ManhwaDetail /></LayoutWithNav>} />
-          <Route path="/bookmarks" element={<LayoutWithNav><Bookmarks /></LayoutWithNav>} />
-          <Route path="/history" element={<LayoutWithNav><History /></LayoutWithNav>} />
-          <Route path="/read/:manhwaId/:chapterId" element={<Reader />} />
-          <Route path="*" element={<LayoutWithNav><NotFound /></LayoutWithNav>} />
+          <Route path="/" element={<Layout><Home /></Layout>} />
+          <Route path="/search" element={<Layout><SearchPage /></Layout>} />
+          <Route path="/manga/:source/:id" element={<Layout><MangaDetail /></Layout>} />
+          <Route path="/manga/:source/:id/chapter/:chapterId" element={<Reader />} />
+          <Route path="/novels" element={<Layout><NovelsHome /></Layout>} />
+          <Route path="/novels/:slug" element={<Layout><NovelDetail /></Layout>} />
+          <Route path="/novels/:slug/chapter/:chapterSlug" element={<Layout><NovelReader /></Layout>} />
+          <Route path="/bookmarks" element={<Layout><Bookmarks /></Layout>} />
+          <Route path="/history" element={<Layout><History /></Layout>} />
+          <Route path="*" element={<Layout><NotFound /></Layout>} />
         </Routes>
       </BrowserRouter>
     </TooltipProvider>
