@@ -28,11 +28,10 @@ export default function Reader() {
     setPages([]);
     setImgErr(new Set());
     try {
-      const [pg, info, ch] = await Promise.all([
-        getChapterPages(id, chapterId, source),
-        getMangaInfo(id, source).catch(() => null),
-        getChapters(id, source, 1).catch(() => ({ chapters: [] as ChapterItem[] })),
-      ]);
+      const info = await getMangaInfo(id, source).catch(() => null);
+      const ch = await getChapters(id, source, 1, "en", info?.title).catch(() => ({ chapters: [] as ChapterItem[] }));
+      const currentCh = (ch.chapters || []).find((c) => c.id === chapterId);
+      const pg = await getChapterPages(id, chapterId, source, currentCh?.source);
       if (!pg.pages || pg.pages.length === 0) throw new Error("No pages found in this chapter.");
       setPages(pg.pages);
       setChapters(ch.chapters || []);

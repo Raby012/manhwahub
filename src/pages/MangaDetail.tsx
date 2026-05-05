@@ -35,13 +35,13 @@ export default function MangaDetail() {
   }, [source, id]);
 
   useEffect(() => {
-    if (!source || !id) return;
+    if (!source || !id || !info) return;
     setChLoading(true);
-    getChapters(id, source, page)
+    getChapters(id, source, page, "en", info.title)
       .then((d) => setChapters(d.chapters || []))
       .catch(() => setChapters([]))
       .finally(() => setChLoading(false));
-  }, [source, id, page]);
+  }, [source, id, page, info]);
 
   function handleBookmark() {
     if (!info || !source || !id) return;
