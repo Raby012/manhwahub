@@ -31,8 +31,13 @@ export default function Reader() {
       const info = await getMangaInfo(id, source).catch(() => null);
       const ch = await getChapters(id, source, 1, "en", info?.title).catch(() => ({ chapters: [] as ChapterItem[] }));
       const currentCh = (ch.chapters || []).find((c) => c.id === chapterId);
-      const pg = await getChapterPages(id, chapterId, source, currentCh?.source);
-      if (!pg.pages || pg.pages.length === 0) throw new Error("No pages found in this chapter.");
+      let pg = await getChapterPages(id, chapterId, source, currentCh?.source).catch(() => null as any);
+      if (!pg || !pg.pages || pg.pages.length === 0) {
+        pg = await getChapterPages(id, chapterId, "comick", "comick").catch(() => null as any);
+      }
+      if (!pg || !pg.pages || pg.pages.length === 0) {
+        throw new Error("No pages available. This chapter may be exclusively on an official platform.");
+      }
       setPages(pg.pages);
       setChapters(ch.chapters || []);
       if (info) {

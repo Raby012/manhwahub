@@ -144,28 +144,43 @@ export default function MangaDetail() {
             <p className="text-sm text-muted-foreground">No chapters found.</p>
           ) : (
             <div className="space-y-1.5">
-              {chapters.map((ch) => (
-                <Link
-                  key={ch.id}
-                  to={`/manga/${source}/${encodeURIComponent(id!)}/chapter/${encodeURIComponent(ch.id)}`}
-                  className="flex items-center justify-between p-3 rounded-lg bg-card border border-border hover:border-primary/50 transition-colors"
-                >
-                  <div className="min-w-0">
-                    <p className="text-sm font-medium">
-                      Ch. {ch.chapter}
-                      {ch.title && <span className="text-muted-foreground"> — {ch.title}</span>}
-                    </p>
-                    {ch.scanlationGroup && (
-                      <p className="text-[11px] text-muted-foreground mt-0.5">{ch.scanlationGroup}</p>
+              {chapters.map((ch) => {
+                const num = ch.chapter && ch.chapter !== "0" ? ch.chapter : null;
+                const label = num
+                  ? `Ch. ${num}${ch.title ? ` — ${ch.title}` : ""}`
+                  : ch.title
+                  ? ch.title
+                  : ch.publishedAt
+                  ? new Date(ch.publishedAt).toLocaleDateString()
+                  : "Chapter";
+                const src = ch.source === "comick" ? "CK" : ch.source === "mangadex" ? "MD" : null;
+                return (
+                  <Link
+                    key={ch.id}
+                    to={`/manga/${source}/${encodeURIComponent(id!)}/chapter/${encodeURIComponent(ch.id)}`}
+                    className="flex items-center justify-between p-3 rounded-lg bg-card border border-border hover:border-primary/50 transition-colors"
+                  >
+                    <div className="min-w-0 flex items-center gap-2">
+                      {src && (
+                        <span className="text-[10px] font-bold px-1.5 py-0.5 rounded bg-primary/15 text-primary shrink-0">
+                          {src}
+                        </span>
+                      )}
+                      <div className="min-w-0">
+                        <p className="text-sm font-medium truncate">{label}</p>
+                        {ch.scanlationGroup && (
+                          <p className="text-[11px] text-muted-foreground mt-0.5 truncate">{ch.scanlationGroup}</p>
+                        )}
+                      </div>
+                    </div>
+                    {ch.publishedAt && num && (
+                      <span className="text-[11px] text-muted-foreground shrink-0 ml-3">
+                        {new Date(ch.publishedAt).toLocaleDateString()}
+                      </span>
                     )}
-                  </div>
-                  {ch.publishedAt && (
-                    <span className="text-[11px] text-muted-foreground shrink-0 ml-3">
-                      {new Date(ch.publishedAt).toLocaleDateString()}
-                    </span>
-                  )}
-                </Link>
-              ))}
+                  </Link>
+                );
+              })}
             </div>
           )}
 
