@@ -134,9 +134,11 @@ export async function getChapters(
   page = 1,
   lang = "en",
   title?: string,
+  altTitles?: string[],
 ): Promise<{ source: string; chapters: ChapterItem[] }> {
   const p = new URLSearchParams({ source, page: String(page), lang });
   if (title) p.set("title", title);
+  p.set("altTitles", (altTitles ?? []).join(","));
   return get(`/api/manga/${encodeURIComponent(id)}/chapters?${p.toString()}`);
 }
 
