@@ -33,6 +33,7 @@ export interface ChapterItem {
   publishedAt?: string;
   scanlationGroup?: string;
   pages?: number;
+  source?: MangaSource;
 }
 
 export interface PagesResponse {
@@ -132,19 +133,23 @@ export async function getChapters(
   source: MangaSource,
   page = 1,
   lang = "en",
+  title?: string,
 ): Promise<{ source: string; chapters: ChapterItem[] }> {
-  return get(
-    `/api/manga/${encodeURIComponent(id)}/chapters?source=${source}&page=${page}&lang=${lang}`,
-  );
+  const p = new URLSearchParams({ source, page: String(page), lang });
+  if (title) p.set("title", title);
+  return get(`/api/manga/${encodeURIComponent(id)}/chapters?${p.toString()}`);
 }
 
 export async function getChapterPages(
   id: string,
   chapterId: string,
   source: MangaSource,
+  chapterSource?: MangaSource,
 ): Promise<PagesResponse> {
+  const p = new URLSearchParams({ source });
+  if (chapterSource) p.set("chapterSource", chapterSource);
   return get(
-    `/api/manga/${encodeURIComponent(id)}/chapters/${encodeURIComponent(chapterId)}/pages?source=${source}`,
+    `/api/manga/${encodeURIComponent(id)}/chapters/${encodeURIComponent(chapterId)}/pages?${p.toString()}`,
     false, // do not cache page lists (large)
   );
 }
