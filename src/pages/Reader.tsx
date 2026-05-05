@@ -31,13 +31,30 @@ export default function Reader() {
       const info = await getMangaInfo(id, source).catch(() => null);
       const ch = await getChapters(id, source, 1, "en", info?.title).catch(() => ({ chapters: [] as ChapterItem[] }));
       const currentCh = (ch.chapters || []).find((c) => c.id === chapterId);
-      let pg = await getChapterPages(id, chapterId, source, currentCh?.source).catch(() => null as any);
-      if (!pg || !pg.pages || pg.pages.length === 0) {
-        pg = await getChapterPages(id, chapterId, "comick", "comick").catch(() => null as any);
+      const tried: MangaSource[] = [];
+      const attempts: MangaSource[] = [];
+      if (currentCh?.source) attempts.push(currentCh.source);
+      if (!attempts.includes("comick")) attempts.push("comick");
+      if (!attempts.includes("mangadex")) attempts.push("mangadex");
+      let pg: any = null;
+      let succeeded: MangaSource | null = null;
+      for (const cs of attempts) {
+        tried.push(cs);
+        console.log(`[Reader] Trying chapterSource=${cs}`);
+        const r = await getChapterPages(id, chapterId, source, cs).catch((e) => {
+          console.warn(`[Reader] ${cs} failed:`, e?.message);
+          return null as any;
+        });
+        if (r && r.pages && r.pages.length > 0) {
+          pg = r;
+          succeeded = cs;
+          break;
+        }
       }
-      if (!pg || !pg.pages || pg.pages.length === 0) {
-        throw new Error("No pages available. This chapter may be exclusively on an official platform.");
+      if (!pg) {
+        throw new Error("Not available. This chapter could not be loaded from any source.");
       }
+      console.log(`[Reader] Loaded ${pg.pages.length} pages from ${succeeded}`);
       setPages(pg.pages);
       setChapters(ch.chapters || []);
       if (info) {

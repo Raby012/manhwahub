@@ -144,15 +144,14 @@ export default function MangaDetail() {
             <p className="text-sm text-muted-foreground">No chapters found.</p>
           ) : (
             <div className="space-y-1.5">
-              {chapters.map((ch) => {
-                const num = ch.chapter && ch.chapter !== "0" ? ch.chapter : null;
+              {chapters.map((ch, i) => {
+                const num = ch.chapter && ch.chapter.trim() && ch.chapter !== "0" ? ch.chapter : null;
+                const hasTitle = ch.title && ch.title.trim();
                 const label = num
-                  ? `Ch. ${num}${ch.title ? ` — ${ch.title}` : ""}`
-                  : ch.title
-                  ? ch.title
-                  : ch.publishedAt
-                  ? new Date(ch.publishedAt).toLocaleDateString()
-                  : "Chapter";
+                  ? `Ch. ${num}${hasTitle ? ` — ${ch.title}` : ""}`
+                  : hasTitle
+                  ? ch.title!
+                  : `Ch. ${chapters.length - i}`;
                 const src = ch.source === "comick" ? "CK" : ch.source === "mangadex" ? "MD" : null;
                 return (
                   <Link
