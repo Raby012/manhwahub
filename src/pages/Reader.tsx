@@ -29,7 +29,7 @@ export default function Reader() {
     setImgErr(new Set());
     try {
       const info = await getMangaInfo(id, source).catch(() => null);
-      const ch = await getChapters(id, source, 1, "en", info?.title).catch(() => ({ chapters: [] as ChapterItem[] }));
+      const ch = await getChapters(id, source, 1, "en", info?.title, info?.altTitles).catch(() => ({ chapters: [] as ChapterItem[] }));
       const currentCh = (ch.chapters || []).find((c) => c.id === chapterId);
       const tried: MangaSource[] = [];
       const attempts: MangaSource[] = [];
