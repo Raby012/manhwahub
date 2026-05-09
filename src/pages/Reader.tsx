@@ -11,6 +11,52 @@ import {
 import { pushHistory } from "@/lib/storage";
 import { ArrowLeft, ChevronLeft, ChevronRight, RefreshCw } from "lucide-react";
 
+function ReaderImage({ src, index }: { src: string; index: number }) {
+  // Tier 0: original URL via Railway image proxy (handles hotlink protection)
+  // Tier 1: wsrv.nl proxy on the raw upstream URL
+  // Tier 2: wsrv.nl proxy on the Railway-proxied URL
+  // Tier 3: hard fail
+  const proxied = PROXY_IMG(src);
+  const wsrvRaw = `https://wsrv.nl/?url=${encodeURIComponent(src)}&n=-1`;
+  const wsrvProxied = `https://wsrv.nl/?url=${encodeURIComponent(proxied)}&n=-1`;
+  const tiers = [proxied, wsrvRaw, wsrvProxied];
+  const [tier, setTier] = useState(0);
+  const [failed, setFailed] = useState(false);
+
+  if (failed) {
+    return (
+      <div className="w-full aspect-[2/3] bg-muted flex flex-col items-center justify-center gap-3 text-muted-foreground text-sm">
+        <p>Failed to load page {index + 1}</p>
+        <button
+          onClick={() => { setTier(0); setFailed(false); }}
+          className="px-4 py-2 bg-primary text-primary-foreground rounded-lg text-xs flex items-center gap-2"
+        >
+          <RefreshCw className="w-3 h-3" /> Retry
+        </button>
+      </div>
+    );
+  }
+
+  return (
+    <img
+      key={tier}
+      src={tiers[tier]}
+      alt={`Page ${index + 1}`}
+      loading={index < 3 ? "eager" : "lazy"}
+      referrerPolicy="no-referrer"
+      className="w-full block bg-muted"
+      onError={() => {
+        if (tier < tiers.length - 1) {
+          console.warn(`[Reader] page ${index + 1} tier ${tier} failed, trying tier ${tier + 1}`);
+          setTier(tier + 1);
+        } else {
+          setFailed(true);
+        }
+      }}
+    />
+  );
+}
+
 export default function Reader() {
   const { source, id, chapterId } = useParams<{ source: MangaSource; id: string; chapterId: string }>();
   const navigate = useNavigate();
