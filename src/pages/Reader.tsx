@@ -173,33 +173,9 @@ export default function Reader() {
         </div>
       ) : (
         <div className="max-w-3xl mx-auto pb-16">
-          {pages.map((url, i) => {
-            const proxied = PROXY_IMG(url);
-            return (
-              <div key={i} className="relative">
-                {imgErr.has(i) ? (
-                  <div className="w-full aspect-[2/3] bg-muted flex flex-col items-center justify-center gap-3 text-muted-foreground text-sm">
-                    <p>Failed to load page {i + 1}</p>
-                    <button
-                      onClick={() => setImgErr((s) => { const n = new Set(s); n.delete(i); return n; })}
-                      className="px-4 py-2 bg-primary text-primary-foreground rounded-lg text-xs flex items-center gap-2"
-                    >
-                      <RefreshCw className="w-3 h-3" /> Retry
-                    </button>
-                  </div>
-                ) : (
-                  <img
-                    src={proxied}
-                    alt={`Page ${i + 1}`}
-                    loading={i < 3 ? "eager" : "lazy"}
-                    referrerPolicy="no-referrer"
-                    className="w-full block bg-muted"
-                    onError={() => setImgErr((s) => new Set(s).add(i))}
-                  />
-                )}
-              </div>
-            );
-          })}
+          {pages.map((url, i) => (
+            <ReaderImage key={`${i}-${url}`} src={url} index={i} />
+          ))}
 
           <div className="py-12 text-center flex flex-col items-center gap-4">
             <p className="text-muted-foreground text-sm">End of chapter</p>
