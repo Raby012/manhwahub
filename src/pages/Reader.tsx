@@ -123,7 +123,8 @@ export default function Reader() {
 
   function go(ch: ChapterItem | null) {
     if (!ch || !source || !id) return;
-    navigate(`/manga/${source}/${encodeURIComponent(id)}/chapter/${encodeURIComponent(ch.id)}`);
+    const q = ch.chapter ? `?num=${encodeURIComponent(ch.chapter)}` : "";
+    navigate(`/manga/${source}/${encodeURIComponent(id)}/chapter/${encodeURIComponent(ch.id)}${q}`);
   }
 
   return (
