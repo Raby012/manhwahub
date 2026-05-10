@@ -80,13 +80,38 @@ export default function Reader() {
         getChapters(id, source, 1, "en").catch(() => ({ chapters: [] as ChapterItem[] })),
       ]);
 
-      const data = await getChapterImages(chapterId, { num: chapterNum, mangaId: id });
+      // Determine chapter.source from chapter list once available, then try: chapter.source → comick → mangadex.
+      const chListEarly = await getChapters(id, source, 1, "en").catch(() => ({ chapters: [] as ChapterItem[] }));
+      const current = (chListEarly.chapters || []).find((c) => c.id === chapterId);
+      const primary = (current?.source as MangaSource | undefined) ?? source;
+      const order: MangaSource[] = [primary, "comick", "mangadex"].filter(
+        (s, i, arr) => arr.indexOf(s) === i,
+      ) as MangaSource[];
 
-      if (!data.pages || data.pages.length === 0) {
+      let pageUrls: string[] = [];
+      let usedSource: string | null = null;
+      for (const cs of order) {
+        try {
+          const data = await getChapterPages(id, chapterId, source, cs);
+          const raw = data.pages || [];
+          const urls = raw
+            .map((p) => (typeof p === "string" ? p : p?.url))
+            .filter((u): u is string => !!u);
+          if (urls.length > 0) {
+            pageUrls = urls;
+            usedSource = cs;
+            break;
+          }
+        } catch (err) {
+          console.warn(`[Reader] chapterSource=${cs} failed:`, err);
+        }
+      }
+
+      if (pageUrls.length === 0) {
         setError("No pages found for this chapter.");
       } else {
-        console.log(`[Reader] Loaded ${data.total} pages from ${data.source}`);
-        setPages(data.pages);
+        console.log(`[Reader] Loaded ${pageUrls.length} pages from chapterSource=${usedSource}`);
+        setPages(pageUrls);
       }
 
       const [mangaInfo, ch] = await metaPromise;
