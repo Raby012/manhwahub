@@ -114,7 +114,7 @@ export default function MangaDetail() {
             <div className="flex gap-3 flex-wrap">
               {firstChapter && (
                 <Link
-                  to={`/manga/${source}/${encodeURIComponent(id!)}/chapter/${encodeURIComponent(firstChapter.id)}`}
+                  to={`/manga/${source}/${encodeURIComponent(id!)}/chapter/${encodeURIComponent(firstChapter.id)}${firstChapter.chapter ? `?num=${encodeURIComponent(firstChapter.chapter)}` : ""}`}
                   className="px-5 py-2.5 bg-primary text-primary-foreground rounded-lg font-medium hover:opacity-90 transition flex items-center gap-2"
                 >
                   <BookOpen className="w-4 h-4" /> Start Reading
@@ -156,7 +156,7 @@ export default function MangaDetail() {
                 return (
                   <Link
                     key={ch.id}
-                    to={`/manga/${source}/${encodeURIComponent(id!)}/chapter/${encodeURIComponent(ch.id)}`}
+                    to={`/manga/${source}/${encodeURIComponent(id!)}/chapter/${encodeURIComponent(ch.id)}${num ? `?num=${encodeURIComponent(num)}` : ""}`}
                     className="flex items-center justify-between p-3 rounded-lg bg-card border border-border hover:border-primary/50 transition-colors"
                   >
                     <div className="min-w-0 flex items-center gap-2">

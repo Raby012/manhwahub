@@ -152,7 +152,21 @@ export async function getChapterPages(
   if (chapterSource) p.set("chapterSource", chapterSource);
   return get(
     `/api/manga/${encodeURIComponent(id)}/chapters/${encodeURIComponent(chapterId)}/pages?${p.toString()}`,
-    false, // do not cache page lists (large)
+    false,
+  );
+}
+
+// New unified server-side endpoint that handles MangaDex → Comick fallback internally.
+export async function getChapterImages(
+  chapterId: string,
+  opts: { num?: string | number; mangaId?: string },
+): Promise<{ pages: string[]; source: string; total: number }> {
+  const p = new URLSearchParams();
+  if (opts.num != null && opts.num !== "") p.set("num", String(opts.num));
+  if (opts.mangaId) p.set("mangaId", opts.mangaId);
+  return get(
+    `/api/proxy/chapter/${encodeURIComponent(chapterId)}?${p.toString()}`,
+    false,
   );
 }
 
