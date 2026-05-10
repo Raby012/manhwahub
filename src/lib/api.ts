@@ -134,11 +134,10 @@ export async function getChapters(
   page = 1,
   lang = "en",
   title?: string,
-  altTitles?: string[],
-): Promise<{ source: string; chapters: ChapterItem[] }> {
-  const p = new URLSearchParams({ source, page: String(page), lang });
+  limit = 96,
+): Promise<{ source: string; chapters: ChapterItem[]; total?: number; sources?: string[] }> {
+  const p = new URLSearchParams({ source, page: String(page), lang, limit: String(limit) });
   if (title) p.set("title", title);
-  p.set("altTitles", (altTitles ?? []).join(","));
   return get(`/api/manga/${encodeURIComponent(id)}/chapters?${p.toString()}`);
 }
 
@@ -147,25 +146,11 @@ export async function getChapterPages(
   chapterId: string,
   source: MangaSource,
   chapterSource?: MangaSource,
-): Promise<PagesResponse> {
+): Promise<{ source?: string; chapterId?: string; pages: Array<string | { url: string; width?: number; height?: number }> }> {
   const p = new URLSearchParams({ source });
   if (chapterSource) p.set("chapterSource", chapterSource);
   return get(
     `/api/manga/${encodeURIComponent(id)}/chapters/${encodeURIComponent(chapterId)}/pages?${p.toString()}`,
-    false,
-  );
-}
-
-// New unified server-side endpoint that handles MangaDex → Comick fallback internally.
-export async function getChapterImages(
-  chapterId: string,
-  opts: { num?: string | number; mangaId?: string },
-): Promise<{ pages: string[]; source: string; total: number }> {
-  const p = new URLSearchParams();
-  if (opts.num != null && opts.num !== "") p.set("num", String(opts.num));
-  if (opts.mangaId) p.set("mangaId", opts.mangaId);
-  return get(
-    `/api/proxy/chapter/${encodeURIComponent(chapterId)}?${p.toString()}`,
     false,
   );
 }
