@@ -114,7 +114,7 @@ export default function MangaDetail() {
             <div className="flex gap-3 flex-wrap">
               {firstChapter && (
                 <Link
-                  to={`/manga/${source}/${encodeURIComponent(id!)}/chapter/${encodeURIComponent(firstChapter.id)}`}
+                  to={`/manga/${source}/${encodeURIComponent(id!)}/chapter/${encodeURIComponent(firstChapter.id)}${firstChapter.chapter ? `?num=${encodeURIComponent(firstChapter.chapter)}` : ""}`}
                   className="px-5 py-2.5 bg-primary text-primary-foreground rounded-lg font-medium hover:opacity-90 transition flex items-center gap-2"
                 >
                   <BookOpen className="w-4 h-4" /> Start Reading
