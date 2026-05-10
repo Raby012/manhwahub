@@ -59,60 +59,48 @@ function ReaderImage({ src, index }: { src: string; index: number }) {
 
 export default function Reader() {
   const { source, id, chapterId } = useParams<{ source: MangaSource; id: string; chapterId: string }>();
+  const [searchParams] = useSearchParams();
+  const chapterNum = searchParams.get("num") || "";
   const navigate = useNavigate();
   const [pages, setPages] = useState<string[]>([]);
   const [chapters, setChapters] = useState<ChapterItem[]>([]);
   const [info, setInfo] = useState<{ title: string; cover?: string; contentType?: string } | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [imgErr, setImgErr] = useState<Set<number>>(new Set());
 
   const load = useCallback(async () => {
     if (!source || !id || !chapterId) return;
     setLoading(true);
     setError(null);
     setPages([]);
-    setImgErr(new Set());
     try {
-      const info = await getMangaInfo(id, source).catch(() => null);
-      const ch = await getChapters(id, source, 1, "en", info?.title, info?.altTitles).catch(() => ({ chapters: [] as ChapterItem[] }));
-      const currentCh = (ch.chapters || []).find((c) => c.id === chapterId);
-      const tried: MangaSource[] = [];
-      const attempts: MangaSource[] = [];
-      if (currentCh?.source) attempts.push(currentCh.source);
-      if (!attempts.includes("comick")) attempts.push("comick");
-      if (!attempts.includes("mangadex")) attempts.push("mangadex");
-      let pg: any = null;
-      let succeeded: MangaSource | null = null;
-      for (const cs of attempts) {
-        tried.push(cs);
-        console.log(`[Reader] Trying chapterSource=${cs}`);
-        const r = await getChapterPages(id, chapterId, source, cs).catch((e) => {
-          console.warn(`[Reader] ${cs} failed:`, e?.message);
-          return null as any;
-        });
-        if (r && r.pages && r.pages.length > 0) {
-          pg = r;
-          succeeded = cs;
-          break;
-        }
+      // Kick off chapter list + manga info in parallel (used for nav + history); don't block image fetch on them.
+      const metaPromise = Promise.all([
+        getMangaInfo(id, source).catch(() => null),
+        getChapters(id, source, 1, "en").catch(() => ({ chapters: [] as ChapterItem[] })),
+      ]);
+
+      const data = await getChapterImages(chapterId, { num: chapterNum, mangaId: id });
+
+      if (!data.pages || data.pages.length === 0) {
+        setError("No pages found for this chapter.");
+      } else {
+        console.log(`[Reader] Loaded ${data.total} pages from ${data.source}`);
+        setPages(data.pages);
       }
-      if (!pg) {
-        throw new Error("Not available. This chapter could not be loaded from any source.");
-      }
-      console.log(`[Reader] Loaded ${pg.pages.length} pages from ${succeeded}`);
-      setPages(pg.pages);
+
+      const [mangaInfo, ch] = await metaPromise;
       setChapters(ch.chapters || []);
-      if (info) {
-        setInfo({ title: info.title, cover: info.coverUrl, contentType: info.contentType });
+      if (mangaInfo) {
+        setInfo({ title: mangaInfo.title, cover: mangaInfo.coverUrl, contentType: mangaInfo.contentType });
         const current = (ch.chapters || []).find((c) => c.id === chapterId);
         pushHistory({
           source,
           id,
-          title: info.title,
-          cover: info.coverUrl,
+          title: mangaInfo.title,
+          cover: mangaInfo.coverUrl,
           chapterId,
-          chapterLabel: current ? `Ch. ${current.chapter}` : "Reading",
+          chapterLabel: current?.chapter ? `Ch. ${current.chapter}` : chapterNum ? `Ch. ${chapterNum}` : "Reading",
         });
       }
     } catch (e: any) {
@@ -120,7 +108,7 @@ export default function Reader() {
     } finally {
       setLoading(false);
     }
-  }, [source, id, chapterId]);
+  }, [source, id, chapterId, chapterNum]);
 
   useEffect(() => {
     load();
