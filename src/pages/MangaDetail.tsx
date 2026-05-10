@@ -156,7 +156,7 @@ export default function MangaDetail() {
                 return (
                   <Link
                     key={ch.id}
-                    to={`/manga/${source}/${encodeURIComponent(id!)}/chapter/${encodeURIComponent(ch.id)}`}
+                    to={`/manga/${source}/${encodeURIComponent(id!)}/chapter/${encodeURIComponent(ch.id)}${num ? `?num=${encodeURIComponent(num)}` : ""}`}
                     className="flex items-center justify-between p-3 rounded-lg bg-card border border-border hover:border-primary/50 transition-colors"
                   >
                     <div className="min-w-0 flex items-center gap-2">
