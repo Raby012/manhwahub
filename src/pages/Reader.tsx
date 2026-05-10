@@ -1,7 +1,7 @@
 import { useEffect, useState, useCallback } from "react";
-import { Link, useNavigate, useParams } from "react-router-dom";
+import { Link, useNavigate, useParams, useSearchParams } from "react-router-dom";
 import {
-  getChapterPages,
+  getChapterImages,
   getChapters,
   getMangaInfo,
   PROXY_IMG,
