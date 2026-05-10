@@ -37,7 +37,7 @@ export default function MangaDetail() {
   useEffect(() => {
     if (!source || !id || !info) return;
     setChLoading(true);
-    getChapters(id, source, page, "en", info.title, info.altTitles)
+    getChapters(id, source, page, "en", info.title, 96)
       .then((d) => setChapters(d.chapters || []))
       .catch(() => setChapters([]))
       .finally(() => setChLoading(false));
