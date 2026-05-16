@@ -93,15 +93,13 @@ export default function Reader() {
       for (const cs of order) {
         try {
           const data = await getChapterPages(id, chapterId, source, cs);
-          const raw = data.pages || [];
-          const urls = raw
-            .map((p) => (typeof p === "string" ? p : p?.url))
-            .filter((u): u is string => !!u);
+          const urls = (data.pages || []).filter((u): u is string => typeof u === "string" && !!u);
           if (urls.length > 0) {
             pageUrls = urls;
             usedSource = cs;
             break;
           }
+
         } catch (err) {
           console.warn(`[Reader] chapterSource=${cs} failed:`, err);
         }
