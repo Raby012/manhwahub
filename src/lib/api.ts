@@ -128,31 +128,66 @@ export async function getMangaInfo(id: string, source: MangaSource): Promise<Man
   return get(`/api/manga/${encodeURIComponent(id)}?source=${source}`);
 }
 
+// Call MangaDex directly from the browser for chapter list (CORS enabled).
+// Railway aggregator is unreliable for this endpoint.
 export async function getChapters(
   id: string,
-  source: MangaSource,
+  _source?: MangaSource,
   page = 1,
   lang = "en",
-  title?: string,
+  _title?: string,
   limit = 96,
-): Promise<{ source: string; chapters: ChapterItem[]; total?: number; sources?: string[] }> {
-  const p = new URLSearchParams({ source, page: String(page), lang, limit: String(limit) });
-  if (title) p.set("title", title);
-  return get(`/api/manga/${encodeURIComponent(id)}/chapters?${p.toString()}`);
+): Promise<{ source: string; chapters: ChapterItem[]; total?: number }> {
+  const offset = (Math.max(1, page) - 1) * limit;
+  const params = new URLSearchParams();
+  params.append("limit", String(limit));
+  params.append("offset", String(offset));
+  params.append("order[chapter]", "asc");
+  params.append("includeExternalUrl", "1");
+  ["safe", "suggestive", "erotica", "pornographic"].forEach((r) =>
+    params.append("contentRating[]", r),
+  );
+  params.append("translatedLanguage[]", lang);
+  params.append("includes[]", "scanlation_group");
+
+  const res = await fetch(`https://api.mangadex.org/manga/${encodeURIComponent(id)}/feed?${params}`);
+  if (!res.ok) throw new Error(`MangaDex ${res.status}`);
+  const data = await res.json();
+
+  const chapters: ChapterItem[] = (data.data ?? [])
+    .map((c: any) => ({
+      id: c.id,
+      chapter: c.attributes?.chapter ?? "",
+      title: c.attributes?.title ?? null,
+      source: "mangadex" as MangaSource,
+      lang: c.attributes?.translatedLanguage ?? "en",
+      publishedAt: c.attributes?.publishAt ?? "",
+      scanlationGroup:
+        c.relationships?.find((r: any) => r.type === "scanlation_group")?.attributes?.name ??
+        "Unknown",
+      pages: c.attributes?.pages ?? 0,
+      isExternal: !!c.attributes?.externalUrl,
+    }))
+    .filter((c: ChapterItem & { isExternal: boolean }) => !c.isExternal);
+
+  return { source: "mangadex", chapters, total: data.total ?? 0 };
 }
 
+// Call MangaDex At-Home directly, return Railway-proxied image URLs.
 export async function getChapterPages(
-  id: string,
+  _id: string,
   chapterId: string,
-  source: MangaSource,
-  chapterSource?: MangaSource,
-): Promise<{ source?: string; chapterId?: string; pages: Array<string | { url: string; width?: number; height?: number }> }> {
-  const p = new URLSearchParams({ source });
-  if (chapterSource) p.set("chapterSource", chapterSource);
-  return get(
-    `/api/manga/${encodeURIComponent(id)}/chapters/${encodeURIComponent(chapterId)}/pages?${p.toString()}`,
-    false,
-  );
+  _source?: MangaSource,
+  _chapterSource?: MangaSource,
+): Promise<{ source: string; chapterId: string; pages: string[] }> {
+  const res = await fetch(`https://api.mangadex.org/at-home/server/${encodeURIComponent(chapterId)}`);
+  if (!res.ok) throw new Error(`MangaDex at-home ${res.status}`);
+  const data = await res.json();
+  const base = data.baseUrl ?? "https://uploads.mangadex.org";
+  const hash = data.chapter?.hash ?? "";
+  const files: string[] = data.chapter?.data ?? [];
+  const pages = files.map((p) => PROXY_IMG(`${base}/data/${hash}/${p}`));
+  return { source: "mangadex", chapterId, pages };
 }
 
 // --- Novels ---

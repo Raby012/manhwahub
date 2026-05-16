@@ -12,14 +12,17 @@ import { pushHistory } from "@/lib/storage";
 import { ArrowLeft, ChevronLeft, ChevronRight, RefreshCw } from "lucide-react";
 
 function ReaderImage({ src, index }: { src: string; index: number }) {
-  // Tier 0: original URL via Railway image proxy (handles hotlink protection)
-  // Tier 1: wsrv.nl proxy on the raw upstream URL
-  // Tier 2: wsrv.nl proxy on the Railway-proxied URL
-  // Tier 3: hard fail
-  const proxied = PROXY_IMG(src);
-  const wsrvRaw = `https://wsrv.nl/?url=${encodeURIComponent(src)}&n=-1`;
-  const wsrvProxied = `https://wsrv.nl/?url=${encodeURIComponent(proxied)}&n=-1`;
-  const tiers = [proxied, wsrvRaw, wsrvProxied];
+  // Pages are already Railway-proxied; use src directly, with wsrv.nl fallbacks.
+  const wsrvProxied = `https://wsrv.nl/?url=${encodeURIComponent(src)}&n=-1`;
+  // Try to extract original upstream URL from ?url= param for an alt wsrv attempt.
+  let upstream = "";
+  try {
+    const u = new URL(src);
+    upstream = u.searchParams.get("url") || "";
+  } catch {}
+  const wsrvRaw = upstream ? `https://wsrv.nl/?url=${encodeURIComponent(upstream)}&n=-1` : wsrvProxied;
+  const tiers = [src, wsrvRaw, wsrvProxied];
+
   const [tier, setTier] = useState(0);
   const [failed, setFailed] = useState(false);
 
@@ -93,15 +96,13 @@ export default function Reader() {
       for (const cs of order) {
         try {
           const data = await getChapterPages(id, chapterId, source, cs);
-          const raw = data.pages || [];
-          const urls = raw
-            .map((p) => (typeof p === "string" ? p : p?.url))
-            .filter((u): u is string => !!u);
+          const urls = (data.pages || []).filter((u): u is string => typeof u === "string" && !!u);
           if (urls.length > 0) {
             pageUrls = urls;
             usedSource = cs;
             break;
           }
+
         } catch (err) {
           console.warn(`[Reader] chapterSource=${cs} failed:`, err);
         }
